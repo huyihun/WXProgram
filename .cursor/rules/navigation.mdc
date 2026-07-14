@@ -1,0 +1,38 @@
+---
+description: 导航栏规范 - 全项目自定义导航，无标题
+globs: src/**/*.vue, src/pages.json
+alwaysApply: true
+---
+
+# 导航栏规范
+
+## 全局配置
+
+- [`src/pages.json`](src/pages.json) 的 `globalStyle` 必须设置 `"navigationStyle": "custom"`
+- **禁止**在页面 `style` 或 `globalStyle` 中配置 `navigationBarTitleText`（不使用系统导航标题）
+
+## 页面实现
+
+- 每个页面的 `<template>` 最顶部使用 `<CustomNav />`（[`src/components/CustomNav.vue`](src/components/CustomNav.vue)）
+- **导航栏不显示标题文字**，仅保留状态栏占位；非首页自动显示返回按钮
+- 需要强制隐藏/显示返回时，使用 `:back="false"` 或 `:back="true"`
+
+## 返回按钮
+
+- 返回样式统一由 `CustomNav` 维护：**浅蓝主题底 + 主色箭头 +「返回」文字**，按钮紧贴左上角
+- **禁止**各页面自行实现返回按钮或使用系统默认返回样式
+
+```vue
+<template>
+  <view class="page">
+    <CustomNav />
+    <!-- 页面内容 -->
+  </view>
+</template>
+```
+
+## 禁止事项
+
+- 不要在页面内重复写 `statusBarHeight` / `navBarHeight` 计算逻辑
+- 不要在自定义导航栏内添加标题 `<text>`（返回按钮除外，由 CustomNav 统一提供）
+- 不要改回系统默认导航栏（`navigationStyle: default`）

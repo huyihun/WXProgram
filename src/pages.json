@@ -1,0 +1,52 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {}
+    },
+    {
+      "path": "pages/notebook/index",
+      "style": {}
+    },
+    {
+      "path": "pages/notebook/todo/index",
+      "style": {}
+    },
+    {
+      "path": "pages/notebook/plan/index",
+      "style": {}
+    },
+    {
+      "path": "pages/notebook/plan/edit",
+      "style": {}
+    },
+    {
+      "path": "pages/notebook/diary/index",
+      "style": {}
+    },
+    {
+      "path": "pages/notebook/diary/edit",
+      "style": {}
+    },
+    {
+      "path": "pages/notebook/mood/index",
+      "style": {}
+    },
+    {
+      "path": "pages/notebook/casual/index",
+      "style": {}
+    }
+  ],
+  "globalStyle": {
+    "navigationStyle": "custom",
+    "navigationBarTextStyle": "black",
+    "navigationBarBackgroundColor": "#E8F2FA",
+    "backgroundColor": "#E8F4FC"
+  },
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^CustomNav$": "@/components/CustomNav.vue"
+    }
+  }
+}

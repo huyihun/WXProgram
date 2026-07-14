@@ -1,0 +1,110 @@
+---
+description: 代码简洁易懂，逻辑扁平，避免过度抽象
+alwaysApply: true
+---
+
+# 代码简洁性
+
+## 核心原则
+
+- 代码以**简洁易懂**为第一目标，同事能一眼看懂在做什么
+- **逻辑扁平**：优先顺序写法、早返回（guard clause），避免 if/try 一层套一层
+- **最小抽象**：只有确实有必要才抽函数；没有复用场景不要抽 util、composable、helper
+- **最小改动**：只改需求涉及的代码，不顺手重构无关逻辑
+
+## 何时才抽方法
+
+✅ 可以抽：
+
+- 同一段逻辑在 2 处及以上复用
+- 单个函数过长，拆开后每段职责清晰（如：校验、提交、跳转分开）
+- 模板里条件过长，抽到 computed 提升可读性
+
+❌ 不要抽：
+
+- 只调用一次、且只有几行的逻辑
+- 仅为「看起来整齐」而包一层 wrapper
+- 把简单顺序流程拆成很多小函数，读起来要跳来跳去
+
+## 禁止过度嵌套
+
+```javascript
+// ❌ 不好：层层嵌套
+async function handleSubmit() {
+  if (valid) {
+    if (formData) {
+      try {
+        const res = await submitApi(formData);
+        if (res.success) {
+          uni.showToast({ title: '成功' });
+        }
+      } catch (e) {
+        uni.showToast({ title: '失败' });
+      }
+    }
+  }
+}
+
+// ✅ 好：早返回，顺序清晰
+async function handleSubmit() {
+  if (!valid) return;
+  if (!formData) return;
+
+  try {
+    const res = await submitApi(formData);
+    if (!res.success) return;
+    uni.showToast({ title: '成功' });
+  } catch (e) {
+    uni.showToast({ title: '失败' });
+  }
+}
+```
+
+## 避免多余代码
+
+不要写没有实际意义的防御性转换或包装：
+
+```javascript
+// ❌ 多余
+const name = String(value || '').trim();
+const id = String(item.id);
+
+// ✅ 够用就行（后端/表单已保证类型时）
+const name = value || '';
+const id = item.id;
+```
+
+仅在**确实有类型不确定、用户输入需清洗**等场景才用 `String()`、`trim()`、`Number()` 等。
+
+## 禁止 `?.` 和 `??`
+
+uni-app 模板编译器 / 部分 mPaaS 运行环境不支持可选链和空值合并，会导致白屏或编译失败。
+
+```javascript
+// ❌ 禁止
+if (selectedSlot?.disabled) return false;
+form.queueCount = body.totalCount ?? '--';
+{{ branch?.phone || '--' }}
+
+// ✅ 推荐：直接用 . 访问，默认值用 ||
+if (selectedSlot.disabled) return false;
+form.queueCount = body.totalCount || '--';
+{{ branch.phone || '--' }}
+```
+
+- **`?.`**：去掉后直接用 `.`，与同文件已有写法（如 `branch.branchName`）保持一致
+- **`??`**：改用 `||` 提供默认值
+- 不要用 `obj && obj.prop` 替代 `?.`，保持代码简洁
+
+## 注释与可维护性
+
+- 关键业务逻辑、接口占位、复杂 UI 区块需写注释，说明**做什么**和**后续怎么接**
+- 注释写「为什么」和「待办事项」，不要重复代码字面意思
+- 静态假数据集中放在 `mock/` 或文件顶部，并标注 `TODO: 接入真实接口`
+- 组件/页面文件顶部可用简短注释说明对应 UI 稿画板（如 s2/s3）
+
+## 写代码前
+
+1. 先读当前文件及周边代码，匹配已有风格
+2. 优先在现有函数/结构里改，而不是新建一层抽象
+3. 写完自检：能否去掉一层嵌套？能否 inline 只调用一次的函数？

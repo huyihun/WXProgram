@@ -1,0 +1,20 @@
+{
+  "name": "hqqprj",
+  "appid": "wxb9419b823a755df1",
+  "description": "个人微信小程序 - uni-app Vue3 云开发骨架",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "wxb9419b823a755df1",
+    "setting": {
+      "urlCheck": true,
+      "es6": true,
+      "postcss": true,
+      "minified": true
+    },
+    "usingComponents": true,
+    "cloudfunctionRoot": "cloudfunctions/"
+  },
+  "vueVersion": "3"
+}

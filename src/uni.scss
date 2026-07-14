@@ -1,0 +1,16 @@
+/* 浅蓝主题色变量（uni-app 会自动注入到各页面 style 中，无需手动 @import） */
+
+$color-bg: #e8f4fc;
+$color-nav: #e8f2fa;
+$color-primary: #4a9fe8;
+$color-primary-dark: #2b7fd4;
+$color-title: #0f2d4a;
+$color-subtitle: #6b8fa8;
+$color-card: #ffffff;
+$color-card-glass: rgba(255, 255, 255, 0.85);
+$color-card-border: rgba(255, 255, 255, 0.6);
+$gradient-hero: linear-gradient(180deg, #d6ebfa 0%, #eef6fc 100%);
+$shadow-card: 0 8rpx 32rpx rgba(43, 127, 212, 0.08);
+
+/* 行楷字体栈：优先系统内置行楷，各端自动回退到楷体 */
+$font-family: 'Xingkai SC', 'STXingkai', '华文行楷', '行楷', 'KaiTi', '楷体', serif;

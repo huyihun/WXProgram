@@ -1,0 +1,48 @@
+---
+description: Vue 页面/组件写法 - 简洁扁平，少抽象
+globs: src/**/*.vue
+alwaysApply: false
+---
+
+# Vue 页面代码风格
+
+## 单文件结构
+
+- 块顺序固定为：**`<template>` → `<script setup>` → `<style>`**
+- `ref`、`computed`、`onLoad`、`onShow` 等由 `unplugin-auto-import` 自动引入，页面内无需 `import`
+- 业务 API（如 `@/api/notebook`）仍需手动 `import`
+
+## script setup
+
+- 业务逻辑写在 `<script setup>` 顶层，用清晰命名的函数：`handleSubmit`、`loadList`
+- 数据用 `ref` / `reactive` 直接声明，不要为了「统一管理」再包一层
+- 异步流程用 `async/await` 顺序写，不要 `.then()` 链式套 `.then()`
+
+## template
+
+- 不在模板里写长表达式或多层三元运算，复杂判断抽到 `computed`
+- 能用现有公共组件（见 `COMPONENTS.md`）就不要自己造
+- 页面顶部统一放 `<CustomNav />`，详见导航栏规范（`.cursor/rules/navigation.mdc`）
+
+## 抽象边界
+
+```javascript
+// ❌ 过度抽象：只用一次却抽 composable
+// useQuestionnaireSubmit.js + useQuestionnaireValidate.js + ...
+
+// ✅ 合理：逻辑留在页面内，按步骤拆成几个顶层函数即可
+async function handleSubmit() {
+  if (!validateForm()) return;
+  const payload = buildPayload();
+  await submitQuestionnaire(payload);
+}
+```
+
+- 没有跨页面复用时，**不要新建** composable / utils 文件
+- 不要把 3 行赋值包装成 `getXxx()` / `formatXxx()` 除非多处复用
+
+## 与项目规范一致
+
+- 使用 Vue 3 Composition API + `<script setup>`
+- 页面/功能模块遵循 `ghb_` 前缀及 `pages.json` 配置
+- 主 `.vue` 文件不使用 TypeScript（与 AGENTS.md 一致）
