@@ -4,7 +4,8 @@
   "description": "个人微信小程序 - uni-app Vue3 云开发骨架",
   "scripts": {
     "dev": "uni -p mp-weixin",
-    "build": "uni build -p mp-weixin"
+    "build": "uni build -p mp-weixin",
+    "books:dongye": "node scripts/epub-to-chapters.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-5010520260709002",

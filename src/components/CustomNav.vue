@@ -4,11 +4,11 @@
       <view
         v-if="showBack"
         class="nav-back"
+        :class="{ 'nav-back--dark': dark }"
         hover-class="nav-back--active"
         @tap="handleBack"
       >
-        <view class="nav-back-arrow" />
-        <text class="nav-back-text">返回</text>
+        <view class="nav-back-chevron" />
       </view>
     </view>
   </view>
@@ -20,6 +20,11 @@ const props = defineProps({
   back: {
     type: Boolean,
     default: undefined,
+  },
+  /** 深色页（如人生重开）：弱化成半透明条，不抢戏 */
+  dark: {
+    type: Boolean,
+    default: false,
   },
 })
 
@@ -37,8 +42,7 @@ onMounted(() => {
 
   const menuButton = wx.getMenuButtonBoundingClientRect()
   if (menuButton) {
-    navBarHeight.value =
-      (menuButton.top - info.statusBarHeight) * 2 + menuButton.height
+    navBarHeight.value = (menuButton.top - info.statusBarHeight) * 2 + menuButton.height
   }
 })
 
@@ -57,43 +61,54 @@ function handleBack() {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  padding: 0;
-  margin-left: -4rpx;
+  padding-left: 8rpx;
 }
 
+/* 圆形轻透返回：只保留箭头，干净不抢内容 */
 .nav-back {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  height: 64rpx;
-  padding: 0 22rpx 0 12rpx;
-  border-radius: 16rpx;
-  background: $color-nav;
-  border: 1rpx solid rgba(74, 159, 232, 0.2);
-  box-shadow: $shadow-card;
-  transition: transform 0.2s ease, background 0.2s ease;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1rpx solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 6rpx 18rpx rgba(43, 80, 120, 0.1);
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    opacity 0.18s ease;
+  box-sizing: border-box;
 }
 
 .nav-back--active {
-  transform: scale(0.96);
-  background: $color-bg;
+  transform: scale(0.94);
+  background: rgba(255, 255, 255, 0.95);
 }
 
-/* 单线左箭头 */
-.nav-back-arrow {
-  width: 14rpx;
-  height: 14rpx;
-  border-left: 3rpx solid $color-primary;
-  border-bottom: 3rpx solid $color-primary;
+.nav-back-chevron {
+  width: 16rpx;
+  height: 16rpx;
+  margin-left: 6rpx;
+  border-left: 4rpx solid $color-primary-dark;
+  border-bottom: 4rpx solid $color-primary-dark;
   transform: rotate(45deg);
-  flex-shrink: 0;
-  margin-right: 2rpx;
+  box-sizing: border-box;
 }
 
-.nav-back-text {
-  font-size: 28rpx;
-  font-weight: 500;
-  color: $color-primary-dark;
-  line-height: 1;
+.nav-back--dark {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1rpx solid rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+
+.nav-back--dark.nav-back--active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.nav-back--dark .nav-back-chevron {
+  border-left-color: rgba(240, 244, 248, 0.88);
+  border-bottom-color: rgba(240, 244, 248, 0.88);
 }
 </style>

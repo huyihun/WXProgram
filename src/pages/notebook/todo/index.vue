@@ -1,7 +1,6 @@
 <template>
-  <view class="page">
-    <CustomNav />
-    <!-- 筛选 Tab -->
+  <PageRoot bottom="160rpx">
+<!-- 筛选 Tab -->
     <view class="filter-bar">
       <view
         v-for="f in filters"
@@ -42,7 +41,7 @@
       />
       <button class="add-btn" @tap="handleAdd">添加</button>
     </view>
-  </view>
+  </PageRoot>
 </template>
 
 <script setup>
@@ -130,12 +129,6 @@ async function handleDelete(item) {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  padding: 24rpx 32rpx 160rpx;
-  background-color: $color-bg;
-}
-
 .filter-bar {
   display: flex;
   gap: 16rpx;

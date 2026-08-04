@@ -3,3 +3,4 @@ dist/
 miniprogram_npm/
 .DS_Store
 project.private.config.json
+books-dist/.tmp-epub/

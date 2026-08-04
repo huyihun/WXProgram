@@ -13,21 +13,33 @@ alwaysApply: true
 
 ## 页面实现
 
-- 每个页面的 `<template>` 最顶部使用 `<CustomNav />`（[`src/components/CustomNav.vue`](src/components/CustomNav.vue)）
+- 每个页面的根组件使用 `<PageRoot>`（见 [page-root.mdc](page-root.mdc)），由它内部渲染 `<CustomNav />`
+- **不要**在页面里再单独写 `<CustomNav />`
 - **导航栏不显示标题文字**，仅保留状态栏占位；非首页自动显示返回按钮
-- 需要强制隐藏/显示返回时，使用 `:back="false"` 或 `:back="true"`
+- 需要强制隐藏/显示返回时，在 PageRoot 上使用 `:back="false"` 或 `:back="true"`
 
 ## 返回按钮
 
-- 返回样式统一由 `CustomNav` 维护：**浅蓝主题底 + 主色箭头 +「返回」文字**，按钮紧贴左上角
+- 返回样式统一由 `CustomNav` 维护，按钮紧贴左上角
+- 默认：**浅蓝主题底 + 主色箭头 +「返回」文字**
+- 深色页：在 `PageRoot` 上加 `dark-nav`，使用半透明幽灵按钮（不抢暗色内容）
 - **禁止**各页面自行实现返回按钮或使用系统默认返回样式
 
 ```vue
 <template>
-  <view class="page">
-    <CustomNav />
+  <PageRoot>
     <!-- 页面内容 -->
-  </view>
+  </PageRoot>
+</template>
+```
+
+深色示例：
+
+```vue
+<template>
+  <PageRoot dark-nav :extra-style="{ backgroundColor: '#0f1319' }">
+    <!-- 暗色页面内容 -->
+  </PageRoot>
 </template>
 ```
 

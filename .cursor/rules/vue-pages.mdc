@@ -21,8 +21,9 @@ alwaysApply: false
 ## template
 
 - 不在模板里写长表达式或多层三元运算，复杂判断抽到 `computed`
-- 能用现有公共组件（见 `COMPONENTS.md`）就不要自己造
-- 页面顶部统一放 `<CustomNav />`，详见导航栏规范（`.cursor/rules/navigation.mdc`）
+- 能用现有公共组件就不要自己造
+- **页面根节点必须是 `<PageRoot>`**，详见 `.cursor/rules/page-root.mdc`
+- 不要在页面内再手写 `<CustomNav />` 或 `.page` 外壳
 
 ## 抽象边界
 

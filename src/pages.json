@@ -2,7 +2,9 @@
   "pages": [
     {
       "path": "pages/index/index",
-      "style": {}
+      "style": {
+        "disableScroll": true
+      }
     },
     {
       "path": "pages/notebook/index",
@@ -17,36 +19,88 @@
       "style": {}
     },
     {
-      "path": "pages/notebook/plan/edit",
-      "style": {}
-    },
-    {
       "path": "pages/notebook/diary/index",
-      "style": {}
-    },
-    {
-      "path": "pages/notebook/diary/edit",
-      "style": {}
-    },
-    {
-      "path": "pages/notebook/mood/index",
       "style": {}
     },
     {
       "path": "pages/notebook/casual/index",
       "style": {}
+    },
+    {
+      "path": "pages/ledger/index",
+      "style": {}
+    },
+    {
+      "path": "pages/ledger/month",
+      "style": {}
+    },
+    {
+      "path": "pages/ledger/year",
+      "style": {}
+    },
+    {
+      "path": "pages/ledger/day",
+      "style": {}
+    },
+    {
+      "path": "pages/supplies/index",
+      "style": {}
+    },
+    {
+      "path": "pages/supplies/daily/index",
+      "style": {}
+    },
+    {
+      "path": "pages/supplies/clothing/index",
+      "style": {}
+    },
+    {
+      "path": "pages/supplies/personal/index",
+      "style": {}
+    },
+    {
+      "path": "pages/supplies/household/index",
+      "style": {}
+    },
+    {
+      "path": "pages/supplies/fruit/index",
+      "style": {}
+    },
+    {
+      "path": "pages/novel/index",
+      "style": {}
+    },
+    {
+      "path": "pages/novel/read",
+      "style": {
+        "disableSwipeBack": true
+      }
+    }
+  ],
+  "subPackages": [
+    {
+      "root": "pages/game",
+      "pages": [
+        {
+          "path": "lifeRestart/index",
+          "style": {
+            "backgroundColor": "#0f1319"
+          }
+        }
+      ]
     }
   ],
   "globalStyle": {
     "navigationStyle": "custom",
     "navigationBarTextStyle": "black",
-    "navigationBarBackgroundColor": "#E8F2FA",
-    "backgroundColor": "#E8F4FC"
+    "navigationBarBackgroundColor": "#EDE2D6",
+    "backgroundColor": "#F3EBE3"
   },
   "easycom": {
     "autoscan": true,
     "custom": {
-      "^CustomNav$": "@/components/CustomNav.vue"
+      "^CustomNav$": "@/components/CustomNav.vue",
+      "^PageRoot$": "@/components/PageRoot.vue"
     }
   }
 }
