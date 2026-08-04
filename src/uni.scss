@@ -1,16 +1,18 @@
-/* 浅蓝主题色变量（uni-app 会自动注入到各页面 style 中，无需手动 @import） */
+/* 主题色：CSS 变量 + 默认回退（咖啡），心情切换时由 PageRoot / page 注入变量 */
 
-$color-bg: #e8f4fc;
-$color-nav: #e8f2fa;
-$color-primary: #4a9fe8;
-$color-primary-dark: #2b7fd4;
-$color-title: #0f2d4a;
-$color-subtitle: #6b8fa8;
+$color-bg: var(--color-bg, #f3ebe3);
+$color-nav: var(--color-nav, #ede2d6);
+$color-primary: var(--color-primary, #8b5e3c);
+$color-primary-dark: var(--color-primary-dark, #6b4423);
+$color-title: var(--color-title, #3e2723);
+$color-subtitle: var(--color-subtitle, #8d6e63);
 $color-card: #ffffff;
+$color-card-soft: var(--color-card-soft, #faf6f2);
 $color-card-glass: rgba(255, 255, 255, 0.85);
 $color-card-border: rgba(255, 255, 255, 0.6);
-$gradient-hero: linear-gradient(180deg, #d6ebfa 0%, #eef6fc 100%);
-$shadow-card: 0 8rpx 32rpx rgba(43, 127, 212, 0.08);
-
-/* 行楷字体栈：优先系统内置行楷，各端自动回退到楷体 */
-$font-family: 'Xingkai SC', 'STXingkai', '华文行楷', '行楷', 'KaiTi', '楷体', serif;
+/* 渐变 / 多层阴影回退勿写逗号嵌套，避免部分端解析 var() 失败 */
+$gradient-hero: var(--gradient-hero, #f6f0ea);
+$shadow-card: 0 8rpx 32rpx rgba(107, 68, 35, 0.08);
+$shadow-card-elevated: var(--shadow-card-elevated);
+$shadow-card-pressed: var(--shadow-card-pressed);
+$shadow-icon: var(--shadow-icon);

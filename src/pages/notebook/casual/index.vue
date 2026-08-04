@@ -1,54 +1,70 @@
 <template>
-  <view class="page">
-    <view class="page-content">
-      <CustomNav />
-    <!-- 顶部快捷输入区 -->
-    <view class="write-card">
-      <textarea
-        v-model="draft"
-        class="write-input"
-        :placeholder="editingId ? '修改内容...' : '此刻的想法...'"
-        :maxlength="500"
-        :focus="inputFocus"
-      />
-      <view class="write-actions">
-        <text v-if="editingId" class="btn-cancel" @tap="handleCancelEdit">取消</text>
-        <button class="btn-save" :loading="saving" @tap="handleSave">
-          {{ editingId ? '保存' : '记下' }}
-        </button>
+  <PageRoot>
+    <view class="casual-page" :style="{ height: bodyHeight + 'px' }">
+      <view class="editor">
+        <view class="toolbar">
+          <text class="action-history" @tap="openPanel">历史 {{ list.length }}</text>
+          <text v-if="editingId" class="action-cancel" @tap="handleCancelEdit">取消</text>
+          <view class="toolbar-spacer" />
+          <text class="action-save" :class="{ disabled: saving }" @tap="handleSave">
+            {{ saveLabel }}
+          </text>
+        </view>
+        <textarea
+          v-model="draft"
+          class="write-input"
+          :style="{ height: inputHeight + 'px' }"
+          :placeholder="editingId ? '修改内容...' : '此刻的想法...'"
+          :maxlength="500"
+          :focus="inputFocus"
+          confirm-type="done"
+          :show-confirm-bar="true"
+          @confirm="handleSave"
+        />
       </view>
     </view>
 
-    <!-- 记录列表 -->
-    <view v-if="loading" class="status-tip">加载中...</view>
-    <view v-else-if="list.length === 0" class="empty">
-      <text class="empty-text">还没有记录，在上方写下第一条吧</text>
-    </view>
-    <view v-else class="note-list">
-      <view
-        v-for="item in list"
-        :key="item._id"
-        class="note-item"
-        :class="{ active: editingId === item._id }"
-        @tap="handleEdit(item)"
-      >
-        <text class="note-time">{{ formatDateTime(item.createdAt) }}</text>
-        <text class="note-content">{{ item.content }}</text>
-        <text class="note-delete" @tap.stop="handleDelete(item)">删除</text>
+    <!-- 历史底部抽屉 -->
+    <view
+      class="sheet-mask"
+      :class="{ show: panelOpen }"
+      @tap="closePanel"
+      @touchmove.stop.prevent
+    />
+    <view class="sheet" :class="{ open: panelOpen }" @touchmove.stop>
+      <view class="sheet-handle" />
+      <view class="panel-header">
+        <text class="panel-title">历史</text>
+        <text class="panel-close" @tap="closePanel">关闭</text>
       </view>
+
+      <view v-if="loading" class="panel-empty">加载中...</view>
+      <view v-else-if="list.length === 0" class="panel-empty">还没有记录</view>
+      <scroll-view v-else scroll-y class="panel-scroll">
+        <view
+          v-for="item in list"
+          :key="item._id"
+          class="note-item"
+          :class="{ active: editingId === item._id }"
+        >
+          <view class="note-time-row">
+            <text class="note-time">{{ formatDateTime(item.createdAt) }}</text>
+          </view>
+          <view class="note-detail">
+            <text class="note-content">{{ item.content }}</text>
+            <view class="note-actions">
+              <text class="note-link" @tap="handleEdit(item)">写入编辑</text>
+              <text class="note-link danger" @tap="handleDelete(item)">删除</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
     </view>
-    </view>
-  </view>
+  </PageRoot>
 </template>
 
 <script setup>
-import {
-  getCasuals,
-  addCasual,
-  updateCasual,
-  removeCasual,
-  formatDateTime,
-} from '@/api/notebook'
+import { getCasuals, addCasual, updateCasual, removeCasual, formatDateTime } from '@/api/notebook'
 
 const draft = ref('')
 const editingId = ref('')
@@ -56,10 +72,52 @@ const list = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const inputFocus = ref(false)
+const panelOpen = ref(false)
+const bodyHeight = ref(500)
+const inputHeight = ref(400)
+
+const saveLabel = computed(() => {
+  if (saving.value) return '保存中…'
+  return editingId.value ? '保存' : '记下'
+})
+
+onMounted(() => {
+  layoutHeights()
+})
 
 onShow(() => {
+  layoutHeights()
   loadList()
 })
+
+/** 按窗口高度计算编辑区，预留底部安全距离 */
+function layoutHeights() {
+  const sys = uni.getSystemInfoSync()
+  const statusBar = sys.statusBarHeight || 0
+  let navBar = 44
+  const menuButton = wx.getMenuButtonBoundingClientRect()
+  if (menuButton) {
+    navBar = (menuButton.top - statusBar) * 2 + menuButton.height
+  }
+  const navTotal = statusBar + navBar
+  const rpx = sys.windowWidth / 750
+  const bodyPadTop = 32 * rpx
+  const rootPadBottom = 48 * rpx
+  const toolbar = 44
+  const safeBottom = (sys.safeAreaInsets && sys.safeAreaInsets.bottom) || 0
+  const bottomGap = 28 + safeBottom
+
+  bodyHeight.value = Math.floor(sys.windowHeight - navTotal - bodyPadTop - rootPadBottom)
+  inputHeight.value = Math.max(200, bodyHeight.value - toolbar - bottomGap)
+}
+
+function openPanel() {
+  panelOpen.value = true
+}
+
+function closePanel() {
+  panelOpen.value = false
+}
 
 async function loadList() {
   loading.value = true
@@ -74,6 +132,7 @@ async function loadList() {
 }
 
 async function handleSave() {
+  if (saving.value) return
   const content = draft.value.trim()
   if (!content) {
     uni.showToast({ title: '写点什么吧', icon: 'none' })
@@ -99,11 +158,15 @@ async function handleSave() {
   }
 }
 
-/** 点击记录，载入到顶部编辑区 */
+/** 将记录载入编辑区 */
 function handleEdit(item) {
   editingId.value = item._id
   draft.value = item.content
-  inputFocus.value = true
+  closePanel()
+  inputFocus.value = false
+  nextTick(() => {
+    inputFocus.value = true
+  })
 }
 
 function handleCancelEdit() {
@@ -132,109 +195,199 @@ async function handleDelete(item) {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background-color: $color-bg;
+.casual-page {
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-.page-content {
-  padding: 32rpx 32rpx 48rpx;
+.editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
-.write-card {
-  background: $color-card;
-  border-radius: 20rpx;
-  padding: 32rpx;
-  margin-bottom: 40rpx;
-  box-shadow: $shadow-card;
+.toolbar {
+  display: flex;
+  align-items: center;
+  height: 80rpx;
+  flex-shrink: 0;
+  gap: 8rpx;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.action-history {
+  font-size: 28rpx;
+  color: $color-primary-dark;
+  padding: 12rpx 8rpx;
+}
+
+.action-cancel {
+  font-size: 28rpx;
+  color: $color-subtitle;
+  padding: 12rpx 8rpx;
+}
+
+.action-save {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: $color-primary-dark;
+  padding: 12rpx 8rpx;
+}
+
+.action-save.disabled {
+  opacity: 0.5;
 }
 
 .write-input {
   width: 100%;
-  height: 360rpx;
-  min-height: 360rpx;
+  box-sizing: border-box;
   font-size: 34rpx;
   line-height: 1.8;
   color: $color-title;
-  box-sizing: border-box;
-}
-
-.write-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 20rpx;
-  margin-top: 16rpx;
-}
-
-.btn-cancel {
-  font-size: 28rpx;
-  color: $color-subtitle;
-  padding: 12rpx 16rpx;
-}
-
-.btn-save {
-  height: 64rpx;
-  line-height: 64rpx;
-  padding: 0 40rpx;
-  background: $color-primary;
-  color: #fff;
-  border-radius: 32rpx;
-  font-size: 28rpx;
-  border: none;
-}
-
-.status-tip,
-.empty {
-  text-align: center;
-  padding: 60rpx 0;
-}
-
-.empty-text {
-  font-size: 28rpx;
-  color: $color-subtitle;
-}
-
-.note-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-}
-
-.note-item {
-  position: relative;
-  padding: 28rpx 32rpx;
   background: $color-card;
-  border-radius: 16rpx;
-  border: 2rpx solid transparent;
+  border-radius: 20rpx;
+  padding: 28rpx;
   box-shadow: $shadow-card;
 }
 
-.note-item.active {
-  border-color: $color-primary;
+/* 遮罩 */
+.sheet-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+  z-index: 200;
+}
+
+.sheet-mask.show {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* 底部抽屉 */
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 65vh;
+  display: flex;
+  flex-direction: column;
+  background: $color-card;
+  border-radius: 28rpx 28rpx 0 0;
+  box-shadow: 0 -8rpx 32rpx rgba(43, 127, 212, 0.12);
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+  z-index: 201;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.sheet.open {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.sheet-handle {
+  width: 64rpx;
+  height: 8rpx;
+  border-radius: 8rpx;
+  background: rgba(0, 0, 0, 0.12);
+  margin: 16rpx auto 0;
+  flex-shrink: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 32rpx 24rpx;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
+}
+
+.panel-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: $color-title;
+}
+
+.panel-close {
+  font-size: 26rpx;
+  color: $color-primary-dark;
+  padding: 8rpx;
+}
+
+.panel-empty {
+  padding: 64rpx 24rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: $color-subtitle;
+}
+
+.panel-scroll {
+  flex: 1;
+  height: 0;
+  padding: 12rpx 0;
+  box-sizing: border-box;
+}
+
+.note-item {
+  padding: 0 32rpx;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.04);
+}
+
+.note-item.active .note-time {
+  color: $color-primary-dark;
+  font-weight: 600;
+}
+
+.note-time-row {
+  padding: 24rpx 0 8rpx;
 }
 
 .note-time {
-  display: block;
   font-size: 24rpx;
   color: $color-subtitle;
-  margin-bottom: 12rpx;
+}
+
+.note-detail {
+  padding: 0 0 28rpx;
 }
 
 .note-content {
   display: block;
-  font-size: 32rpx;
+  font-size: 28rpx;
   line-height: 1.7;
   color: $color-title;
-  padding-right: 60rpx;
   word-break: break-all;
+  margin-bottom: 16rpx;
 }
 
-.note-delete {
-  position: absolute;
-  top: 28rpx;
-  right: 28rpx;
-  font-size: 24rpx;
+.note-actions {
+  display: flex;
+  gap: 32rpx;
+}
+
+.note-link {
+  font-size: 26rpx;
+  color: $color-primary-dark;
+}
+
+.note-link.danger {
   color: #e74c3c;
 }
 </style>

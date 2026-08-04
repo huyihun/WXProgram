@@ -14,7 +14,8 @@
       "minified": true
     },
     "usingComponents": true,
-    "cloudfunctionRoot": "cloudfunctions/"
+    "cloudfunctionRoot": "cloudfunctions/",
+    "requiredBackgroundModes": ["audio"]
   },
   "vueVersion": "3"
 }
