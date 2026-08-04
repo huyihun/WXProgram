@@ -14,25 +14,6 @@
 const db = wx.cloud.database()
 const PAGE_SIZE = 20
 
-/** 预设心情选项（咖啡为默认主题） */
-export const MOOD_OPTIONS = [
-  { key: 'coffee', label: '咖啡', emoji: '☕' },
-  { key: 'happy', label: '开心', emoji: '😊' },
-  { key: 'calm', label: '平静', emoji: '😌' },
-  { key: 'sad', label: '难过', emoji: '😢' },
-  { key: 'anxious', label: '焦虑', emoji: '😰' },
-  { key: 'tired', label: '疲惫', emoji: '😩' },
-  { key: 'excited', label: '兴奋', emoji: '🤩' },
-  { key: 'grateful', label: '感恩', emoji: '🙏' },
-  { key: 'peaceful', label: '安宁', emoji: '🕊️' },
-  { key: 'lonely', label: '孤独', emoji: '🌙' },
-  { key: 'bored', label: '无聊', emoji: '😑' },
-  { key: 'angry', label: '愤怒', emoji: '😡' },
-  { key: 'focused', label: '专注', emoji: '🎯' },
-  { key: 'surprised', label: '惊喜', emoji: '✨' },
-  { key: 'relaxed', label: '放松', emoji: '🌱' },
-]
-
 /** 格式化 Date 为 YYYY-MM-DD */
 export function formatDate(date = new Date()) {
   const y = date.getFullYear()
@@ -296,12 +277,7 @@ export async function removeDiaryByDate(date) {
   }
 }
 
-export function getMoodLabel(moodKey) {
-  for (let i = 0; i < MOOD_OPTIONS.length; i++) {
-    if (MOOD_OPTIONS[i].key === moodKey) return MOOD_OPTIONS[i].label
-  }
-  return ''
-}
+
 
 // ─── 心情 ───────────────────────────────────────────────
 

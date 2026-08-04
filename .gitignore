@@ -3,4 +3,17 @@ dist/
 miniprogram_npm/
 .DS_Store
 project.private.config.json
-books-dist/.tmp-epub/
+
+# 本地依赖 / 转换产物 / 素材源（不进仓库）
+.pydeps/
+books-dist/
+xiaoshuo/
+upload/
+assets/
+wheather/
+
+# 根目录临时备注与杂图（正式静态资源在 src/static）
+/juluo.jpg
+/image.png
+/天气参数.txt
+/天气控制台.png

@@ -6,7 +6,45 @@
           <!-- Hero：问候轻、语录主 -->
           <view class="hero fade-in hero--vip">
             <text class="greeting">{{ greeting }}</text>
-            <text id="homeHeroDesc" class="hero-desc">{{ healingQuote }}</text>
+            <view class="hero-quote">
+              <!-- 主人多条：上下滚动轮播 -->
+              <swiper
+                v-if="isOwner && quoteSlideList.length > 1"
+                class="quote-swiper"
+                vertical
+                autoplay
+                circular
+                :interval="3000"
+                :duration="500"
+                :indicator-dots="false"
+              >
+                <swiper-item v-for="(text, idx) in quoteSlideList" :key="'quote-' + idx">
+                  <view class="quote-slide">
+                    <text class="hero-desc">{{ text }}</text>
+                  </view>
+                </swiper-item>
+              </swiper>
+              <!-- 非主人 / 主人仅一条：静态展示 -->
+              <text v-else-if="quoteDisplayText" id="homeHeroDesc" class="hero-desc">
+                {{ quoteDisplayText }}
+              </text>
+              <!-- 仅主人：icon 入口，弹框增删改，不跳转 -->
+              <view v-if="isOwner" class="quote-ops">
+                <view class="quote-ico" hover-class="quote-ico--active" @tap.stop="openQuoteAdd">
+                  <view class="ico-plus">
+                    <view class="ico-plus-h" />
+                    <view class="ico-plus-v" />
+                  </view>
+                </view>
+                <view class="quote-ico" hover-class="quote-ico--active" @tap.stop="openQuoteList">
+                  <view class="ico-lines">
+                    <view class="ico-lines-row" />
+                    <view class="ico-lines-row mid" />
+                    <view class="ico-lines-row short" />
+                  </view>
+                </view>
+              </view>
+            </view>
           </view>
 
           <!-- 分类宫格：记录 / 游戏 / 休闲 -->
@@ -24,7 +62,7 @@
                 v-for="(item, index) in section.items"
                 :key="item.id"
                 class="entry-card"
-                :class="'entry-delay-' + (sIndex * 3 + index)"
+                :class="'entry-delay-' + (sIndex * 4 + index)"
                 hover-class="entry-card--active"
                 @tap="handleEntryTap(item)"
               >
@@ -57,9 +95,9 @@
                       <view class="icon-novel-page" />
                     </view>
                   </view>
-                  <view v-else-if="item.id === 'lifeRestart'" class="icon-life">
-                    <view class="icon-life-ring" />
-                    <view class="icon-life-arrow" />
+                  <view v-else-if="item.id === 'diet'" class="icon-diet">
+                    <view class="icon-diet-plate" />
+                    <view class="icon-diet-leaf" />
                   </view>
                 </view>
                 <text class="entry-name">{{ item.name }}</text>
@@ -70,7 +108,11 @@
       </view>
     </view>
 
-    <!-- 右上角：天气坞，视频作坞内背景 -->
+    <!-- 左上角：心情头像；其右侧为天气坞 -->
+    <view class="mood-entry" :style="moodEntryStyle" @tap="moodOpen = true">
+      <image v-if="moodImageUrl" class="mood-entry-img" :src="moodImageUrl" mode="aspectFill" />
+      <text v-else class="mood-entry-text">心情</text>
+    </view>
     <view v-if="weather" class="weather-dock" :style="weatherDockStyle" @tap="toggleWeatherCity">
       <video
         v-if="weatherFxSrc"
@@ -92,27 +134,67 @@
       <view class="weather-dock-tint" />
       <view class="weather-dock-body" :class="weatherTextClass">
         <text class="weather-temp">{{ weatherTemp }}</text>
-        <view class="weather-cond">
-          <view class="wx-ico" :class="'ico-' + weatherIconKind" />
-          <text class="weather-cond-text">{{ weatherCondText }}</text>
-        </view>
-        <view class="weather-city-row">
-          <text class="weather-city">{{ weatherCity }}</text>
-          <view class="weather-toggle" :class="{ busy: weatherBusy }">
-            <view class="toggle-spin" :class="{ spin: weatherBusy }">
-              <view class="spin-arc spin-arc-a" />
-              <view class="spin-arc spin-arc-b" />
-              <view class="spin-tip tip-a" />
-              <view class="spin-tip tip-b" />
+        <view class="weather-meta">
+          <view class="weather-cond">
+            <view class="wx-ico" :class="'ico-' + weatherIconKind" />
+            <text class="weather-cond-text">{{ weatherCondText }}</text>
+          </view>
+          <view class="weather-city-row">
+            <text class="weather-city">{{ weatherCity }}</text>
+            <view class="weather-toggle" :class="{ busy: weatherBusy }">
+              <view class="toggle-spin" :class="{ spin: weatherBusy }">
+                <view class="spin-arc spin-arc-a" />
+                <view class="spin-arc spin-arc-b" />
+                <view class="spin-tip tip-a" />
+                <view class="spin-tip tip-b" />
+              </view>
             </view>
           </view>
         </view>
-        <text class="weather-date">{{ todayText }}</text>
       </view>
     </view>
-    <view class="mood-entry" :style="moodEntryStyle" @tap="moodOpen = true">
-      <text v-if="moodEmoji" class="mood-entry-emoji">{{ moodEmoji }}</text>
-      <text v-else class="mood-entry-text">心情</text>
+
+    <!-- 主人：新增 / 编辑语录 -->
+    <view v-if="quoteEditOpen" class="modal-mask" @tap="closeQuoteEdit" @touchmove.stop.prevent />
+    <view v-if="quoteEditOpen" class="modal-panel" @tap.stop @touchmove.stop>
+      <text class="modal-title">{{ quoteEditingId ? '编辑语录' : '新增语录' }}</text>
+      <textarea
+        class="field-area"
+        v-model="quoteDraft"
+        placeholder="写下这句经典语录..."
+        :maxlength="200"
+        :focus="quoteInputFocus"
+        :show-confirm-bar="false"
+      />
+      <view class="modal-actions">
+        <text class="btn-cancel" @tap="closeQuoteEdit">取消</text>
+        <text class="btn-confirm" :class="{ disabled: quoteSaving }" @tap="saveQuoteEdit">
+          {{ quoteSaving ? '保存中…' : '保存' }}
+        </text>
+      </view>
+    </view>
+
+    <!-- 主人：语录列表 -->
+    <view v-if="quoteListOpen" class="modal-mask" @tap="closeQuoteList" @touchmove.stop.prevent />
+    <view v-if="quoteListOpen" class="modal-panel modal-panel--list" @tap.stop @touchmove.stop>
+      <view class="list-head">
+        <text class="modal-title list-title">经典语录</text>
+        <text class="list-close" @tap="closeQuoteList">关闭</text>
+      </view>
+      <view v-if="quoteListLoading" class="list-empty">加载中...</view>
+      <view v-else-if="myQuotes.length === 0" class="list-empty">还没有语录</view>
+      <scroll-view v-else scroll-y class="quote-list-scroll">
+        <view v-for="item in myQuotes" :key="item._id" class="quote-list-item">
+          <text class="quote-list-content">{{ item.content }}</text>
+          <view class="quote-list-foot">
+            <text class="quote-list-time">{{ formatQuoteTime(item.createdAt) }}</text>
+            <view class="quote-list-actions">
+              <text class="quote-link" @tap="openQuoteEditItem(item)">编辑</text>
+              <text class="quote-link danger" @tap="removeQuoteItem(item)">删除</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
     </view>
 
     <MoodPicker :show="moodOpen" @close="moodOpen = false" @change="onMoodChange" />
@@ -121,9 +203,13 @@
 </template>
 
 <script setup>
-import { MOOD_OPTIONS, getMoodByDate, getToday } from '@/api/notebook'
+import { getMoodByDate, getToday } from '@/api/notebook'
+import { listMoodEmojis, resolveMoodImageUrls, getMoodEmojiByKey, prefetchMoodCatalog } from '@/api/moodCatalog'
+import { getQuotes, addQuote, updateQuote, removeQuote, formatQuoteTime } from '@/api/quotes'
 import { loadHomeWeather, COMMON_CITIES } from '@/api/weather'
 import { getWeatherFxLocalPath } from '@/utils/weatherFx'
+import { loadOwnerFlag, isOwnerSync } from '@/utils/owner'
+import { applyMoodThemeFromItem, registerMoodThemes } from '@/utils/moodTheme'
 import MoodPicker from '@/components/MoodPicker.vue'
 import HomeMusicBar from '@/components/HomeMusicBar.vue'
 
@@ -231,6 +317,8 @@ const HEALING_QUOTES = [
   '把希望留着，它会在某个清晨回应你。',
 ]
 
+const isOwner = ref(false)
+
 const entries = ref([
   {
     id: 'notebook',
@@ -251,10 +339,11 @@ const entries = ref([
     path: '/pages/supplies/index',
   },
   {
-    id: 'lifeRestart',
-    name: '人生重开',
-    desc: '如果人生可以重来',
-    path: '/pages/game/lifeRestart/index',
+    id: 'diet',
+    name: '减肥',
+    desc: '体重与饮食记录',
+    path: '/pages/diet/index',
+    ownerOnly: true,
   },
 ])
 
@@ -266,16 +355,49 @@ const novelEntry = {
 }
 
 const moodOpen = ref(false)
-const moodEmoji = ref('')
+const moodImageUrl = ref('')
 const moodEntryStyle = ref({})
 const weatherDockStyle = ref({})
 const contentPadStyle = ref({})
 const healingQuote = ref('')
+const myQuotes = ref([])
+const quoteEditOpen = ref(false)
+const quoteListOpen = ref(false)
+const quoteListLoading = ref(false)
+const quoteEditingId = ref('')
+const quoteDraft = ref('')
+const quoteSaving = ref(false)
+const quoteInputFocus = ref(false)
+
+const quoteSlideList = computed(() => {
+  const list = []
+  for (let i = 0; i < myQuotes.value.length; i++) {
+    const text = myQuotes.value[i].content
+    if (text) list.push(text)
+  }
+  return list
+})
+
+/** 非主人用本地语录；主人仅一条时静态展示 */
+const quoteDisplayText = computed(() => {
+  if (isOwner.value) {
+    if (quoteSlideList.value.length === 1) return quoteSlideList.value[0]
+    return ''
+  }
+  return healingQuote.value
+})
+
 const weather = ref(null)
 const weatherBusy = ref(false)
 const weatherTextPhase = ref('') // '' | 'out' | 'in'
 const weatherFxSrc = ref('')
 let weatherFxToken = 0
+
+function visibleEntry(item) {
+  if (!item) return null
+  if (item.ownerOnly && !isOwner.value) return null
+  return item
+}
 
 const entrySections = computed(() => {
   const list = entries.value
@@ -284,9 +406,10 @@ const entrySections = computed(() => {
     byId[list[i].id] = list[i]
   }
   const recordItems = [
-    byId.notebook,
-    byId.ledger,
-    byId.supplies,
+    visibleEntry(byId.notebook),
+    visibleEntry(byId.ledger),
+    visibleEntry(byId.supplies),
+    visibleEntry(byId.diet),
   ].filter(Boolean)
 
   return [
@@ -295,12 +418,6 @@ const entrySections = computed(() => {
       title: '记录',
       sub: 'RECORD',
       items: recordItems,
-    },
-    {
-      id: 'game',
-      title: '游戏',
-      sub: 'GAME',
-      items: [byId.lifeRestart].filter(Boolean),
     },
     {
       id: 'leisure',
@@ -351,17 +468,12 @@ const greeting = computed(() => {
   return '晚上好，超凡时刻'
 })
 
-const todayText = computed(() => {
-  const date = new Date()
-  const weekDays = ['日', '一', '二', '三', '四', '五', '六']
-  return date.getMonth() + 1 + '月' + date.getDate() + '日 · 星期' + weekDays[date.getDay()]
-})
-
 onMounted(() => {
   layoutTopEntries()
   pickHealingQuote()
   loadMoodEntry()
   refreshWeather()
+  refreshOwnerAndQuotes()
 })
 
 onUnmounted(() => {
@@ -371,7 +483,128 @@ onUnmounted(() => {
 onShow(() => {
   loadMoodEntry()
   if (!weather.value) refreshWeather()
+  refreshOwnerAndQuotes()
 })
+
+async function refreshOwner() {
+  isOwner.value = await loadOwnerFlag()
+  if (!isOwner.value) isOwner.value = isOwnerSync()
+}
+
+/** 非主人维持原状；主人拉取私有语录供上下轮播 */
+async function refreshOwnerAndQuotes() {
+  await refreshOwner()
+  if (!isOwner.value) {
+    myQuotes.value = []
+    return
+  }
+  await loadHomeQuotes()
+}
+
+function pickHealingQuote() {
+  const list = HEALING_QUOTES
+  if (!list.length) return
+  let next = list[Math.floor(Math.random() * list.length)]
+  if (list.length > 1 && next === healingQuote.value) {
+    next = list[Math.floor(Math.random() * list.length)]
+  }
+  healingQuote.value = next
+}
+
+async function loadHomeQuotes() {
+  try {
+    myQuotes.value = await getQuotes()
+  } catch (err) {
+    console.error('加载首页语录失败', err)
+    myQuotes.value = []
+  }
+}
+
+function openQuoteAdd() {
+  quoteEditingId.value = ''
+  quoteDraft.value = ''
+  quoteEditOpen.value = true
+  quoteInputFocus.value = false
+  nextTick(() => {
+    quoteInputFocus.value = true
+  })
+}
+
+function openQuoteEditItem(item) {
+  quoteEditingId.value = item._id
+  quoteDraft.value = item.content || ''
+  quoteEditOpen.value = true
+  quoteInputFocus.value = false
+  nextTick(() => {
+    quoteInputFocus.value = true
+  })
+}
+
+function closeQuoteEdit() {
+  quoteEditOpen.value = false
+  quoteEditingId.value = ''
+  quoteDraft.value = ''
+  quoteInputFocus.value = false
+}
+
+async function saveQuoteEdit() {
+  if (quoteSaving.value) return
+  const content = quoteDraft.value.trim()
+  if (!content) {
+    uni.showToast({ title: '请输入语录内容', icon: 'none' })
+    return
+  }
+  quoteSaving.value = true
+  try {
+    if (quoteEditingId.value) {
+      await updateQuote(quoteEditingId.value, content)
+      uni.showToast({ title: '已更新', icon: 'success' })
+    } else {
+      await addQuote(content)
+      uni.showToast({ title: '已添加', icon: 'success' })
+    }
+    closeQuoteEdit()
+    await loadHomeQuotes()
+  } catch (err) {
+    console.error('保存语录失败', err)
+    uni.showToast({ title: '保存失败，请检查云数据库', icon: 'none' })
+  } finally {
+    quoteSaving.value = false
+  }
+}
+
+async function openQuoteList() {
+  quoteListOpen.value = true
+  quoteListLoading.value = true
+  try {
+    myQuotes.value = await getQuotes()
+  } catch (err) {
+    console.error('加载语录列表失败', err)
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  } finally {
+    quoteListLoading.value = false
+  }
+}
+
+function closeQuoteList() {
+  quoteListOpen.value = false
+}
+
+async function removeQuoteItem(item) {
+  const res = await uni.showModal({
+    title: '确认删除',
+    content: '确定删除这句语录吗？',
+  })
+  if (!res.confirm) return
+  try {
+    await removeQuote(item._id)
+    myQuotes.value = myQuotes.value.filter((q) => q._id !== item._id)
+    uni.showToast({ title: '已删除', icon: 'success' })
+  } catch (err) {
+    console.error('删除语录失败', err)
+    uni.showToast({ title: '删除失败', icon: 'none' })
+  }
+}
 
 watch(weatherIconKind, () => {
   syncWeatherFx()
@@ -462,87 +695,78 @@ async function toggleWeatherCity() {
   }
 }
 
-function pickHealingQuote() {
-  const list = HEALING_QUOTES
-  if (!list.length) return
-  let next = list[Math.floor(Math.random() * list.length)]
-  if (list.length > 1 && next === healingQuote.value) {
-    next = list[Math.floor(Math.random() * list.length)]
-  }
-  healingQuote.value = next
-}
-
-/** 天气坞左上角；心情贴胶囊左侧；内容区顶距避开天气坞 */
+/** 左上角心情头像；天气坞紧挨其右侧；内容区顶距避开这一行 */
 function layoutTopEntries() {
   const sys = uni.getSystemInfoSync()
   const menu = wx.getMenuButtonBoundingClientRect()
   const edgePad = 16
-  const dockW = 208
-  // 坞内四行（温/况/城/日期）估高，给问候语留空
-  const dockH = 70
+  const gap = 10
+  // 头像 64px；天气坞同高、更窄
+  const avatarSize = 64
+  const dockW = 148
+  const dockH = avatarSize
   const contentGap = 28
-
-  if (!menu) {
-    const top = (sys.statusBarHeight || 20) + 6
-    moodEntryStyle.value = {
-      top: top + 'px',
-      right: edgePad + 'px',
-      height: '32px',
-    }
-    weatherDockStyle.value = {
-      top: top + 'px',
-      left: edgePad + 'px',
-      width: dockW + 'px',
-    }
-    contentPadStyle.value = {
-      paddingTop: dockH + contentGap + 'px',
-    }
-    return
-  }
-
-  const moodRight = sys.windowWidth - menu.left + 8
-  // 导航栏大致到胶囊底；坞底相对内容起点的伸出量
-  const navBottom = menu.top + menu.height
-  const dockBottom = menu.top + dockH
-  const padTop = Math.max(48, dockBottom - navBottom + contentGap)
+  const statusTop = (sys.statusBarHeight || 20) + 6
+  const top = menu && menu.top ? menu.top : statusTop
+  const rowH = avatarSize
+  const navBottom = menu && menu.height ? menu.top + menu.height : top + 32
+  const padTop = Math.max(48, top + rowH - navBottom + contentGap)
 
   moodEntryStyle.value = {
-    top: menu.top + 'px',
-    right: moodRight + 'px',
-    height: menu.height + 'px',
+    top: top + 'px',
+    left: edgePad + 'px',
+    width: avatarSize + 'px',
+    height: avatarSize + 'px',
   }
   weatherDockStyle.value = {
-    top: menu.top + 'px',
-    left: edgePad + 'px',
+    top: top + 'px',
+    left: edgePad + avatarSize + gap + 'px',
     width: dockW + 'px',
+    height: dockH + 'px',
   }
   contentPadStyle.value = {
     paddingTop: padTop + 'px',
   }
 }
 
+async function applyMoodEntryItem(item) {
+  if (!item) {
+    moodImageUrl.value = ''
+    return
+  }
+  applyMoodThemeFromItem(item)
+  if (!item.fileID) {
+    moodImageUrl.value = ''
+    return
+  }
+  const urlMap = await resolveMoodImageUrls([item])
+  moodImageUrl.value = urlMap[item.fileID] || ''
+}
+
 async function loadMoodEntry() {
   try {
+    const list = await listMoodEmojis()
+    registerMoodThemes(list)
     const data = await getMoodByDate(getToday())
+    let item = null
     if (data && data.moodKey) {
-      moodEmoji.value = getEmojiByKey(data.moodKey)
-    } else {
-      moodEmoji.value = ''
+      item = await getMoodEmojiByKey(data.moodKey)
     }
+    // 今日未选心情时，默认展示云目录第一个
+    if (!item && list.length) {
+      item = list[0]
+    }
+    await applyMoodEntryItem(item)
+    prefetchMoodCatalog()
   } catch (err) {
     console.error('加载首页心情失败', err)
   }
 }
 
-function getEmojiByKey(key) {
-  for (let i = 0; i < MOOD_OPTIONS.length; i++) {
-    if (MOOD_OPTIONS[i].key === key) return MOOD_OPTIONS[i].emoji
-  }
-  return ''
-}
-
 function onMoodChange(item) {
-  moodEmoji.value = item.emoji || ''
+  if (!item) return
+  applyMoodThemeFromItem(item)
+  moodImageUrl.value = item.imageUrl || ''
 }
 
 function handleEntryTap(item) {
@@ -565,30 +789,30 @@ function handleEntryTap(item) {
 
 .mood-entry {
   position: fixed;
-  z-index: 110;
+  z-index: 111;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 80rpx;
-  min-height: 56rpx;
-  padding: 6rpx 20rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.55);
-  border: 1rpx solid rgba(74, 159, 232, 0.16);
-  box-shadow: 0 4rpx 16rpx rgba(43, 127, 212, 0.06);
+  padding: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.72);
+  border: 3rpx solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 6rpx 20rpx rgba(43, 127, 212, 0.14);
   box-sizing: border-box;
 }
 
-.mood-entry-emoji {
-  font-size: 40rpx;
-  line-height: 1;
+.mood-entry-img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .mood-entry-text {
-  font-size: 24rpx;
-  font-weight: 400;
+  font-size: 22rpx;
+  font-weight: 500;
   color: $color-subtitle;
-  letter-spacing: 4rpx;
+  letter-spacing: 2rpx;
   line-height: 1;
 }
 
@@ -613,7 +837,7 @@ function handleEntryTap(item) {
 }
 
 .content--vip .hero-desc {
-  font-size: 36rpx;
+  font-size: 28rpx;
   font-weight: 600;
 }
 
@@ -640,15 +864,16 @@ function handleEntryTap(item) {
 .weather-dock {
   position: fixed;
   z-index: 110;
+  display: flex;
+  align-items: center;
   min-height: 0;
-  padding: 16rpx 18rpx 14rpx;
-  border-radius: 22rpx;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.28);
   border: 1rpx solid rgba(255, 255, 255, 0.42);
   box-shadow: 0 6rpx 20rpx rgba(43, 127, 212, 0.1);
   box-sizing: border-box;
-  text-align: center;
 }
 
 .weather-dock-video {
@@ -659,7 +884,7 @@ function handleEntryTap(item) {
   height: 100%;
   pointer-events: none;
   z-index: 0;
-  border-radius: 24rpx;
+  border-radius: 999rpx;
 }
 
 .weather-dock-tint {
@@ -676,6 +901,10 @@ function handleEntryTap(item) {
 .weather-dock-body {
   position: relative;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  width: 100%;
   transition:
     opacity 0.22s ease,
     transform 0.22s ease;
@@ -691,60 +920,61 @@ function handleEntryTap(item) {
 }
 
 .weather-temp {
-  display: block;
-  font-size: 34rpx;
+  flex-shrink: 0;
+  font-size: 32rpx;
   font-weight: 700;
   color: #1a1a1a;
-  line-height: 1.1;
-  letter-spacing: 1rpx;
-  text-align: center;
+  line-height: 1;
+  letter-spacing: 0;
   text-shadow: 0 1rpx 4rpx rgba(255, 255, 255, 0.75);
+}
+
+.weather-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4rpx;
 }
 
 .weather-cond {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  margin-top: 4rpx;
+  gap: 4rpx;
+  margin-top: 0;
 }
 
 .weather-cond-text {
-  font-size: 22rpx;
+  font-size: 18rpx;
   font-weight: 700;
   color: #1a1a1a;
-  letter-spacing: 1rpx;
+  letter-spacing: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .weather-city-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  margin-top: 4rpx;
+  gap: 6rpx;
+  margin-top: 0;
 }
 
 .weather-city {
-  font-size: 20rpx;
+  font-size: 18rpx;
   font-weight: 700;
   color: #1a1a1a;
-  letter-spacing: 1rpx;
-}
-
-.weather-date {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 20rpx;
-  font-weight: 600;
-  color: #1a1a1a;
-  letter-spacing: 1rpx;
-  line-height: 1.3;
-  text-align: center;
+  letter-spacing: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .weather-toggle {
-  width: 36rpx;
-  height: 36rpx;
+  width: 28rpx;
+  height: 28rpx;
   border-radius: 50%;
   flex-shrink: 0;
   display: flex;
@@ -819,8 +1049,8 @@ function handleEntryTap(item) {
 /* 天气状况 CSS 图标 */
 .wx-ico {
   position: relative;
-  width: 28rpx;
-  height: 28rpx;
+  width: 22rpx;
+  height: 22rpx;
   flex-shrink: 0;
 }
 
@@ -930,14 +1160,269 @@ function handleEntryTap(item) {
   }
 }
 
+.hero-quote {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.quote-swiper {
+  flex: 1;
+  min-width: 0;
+  height: 100rpx;
+}
+
+.quote-slide {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+}
+
 .hero-desc {
-  display: block;
-  font-size: 32rpx;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  font-size: 28rpx;
   font-weight: 400;
   color: $color-primary-dark;
   line-height: 1.75;
-  letter-spacing: 2rpx;
+  letter-spacing: 1rpx;
   opacity: 0.92;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* 轮播视口约两行，超出省略 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.quote-ops {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12rpx;
+  padding-top: 4rpx;
+}
+
+.quote-ico {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 16rpx;
+  background: rgba(74, 159, 232, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quote-ico--active {
+  opacity: 0.75;
+}
+
+.ico-plus {
+  position: relative;
+  width: 22rpx;
+  height: 22rpx;
+}
+
+.ico-plus-h,
+.ico-plus-v {
+  position: absolute;
+  background: $color-primary-dark;
+  border-radius: 2rpx;
+}
+
+.ico-plus-h {
+  left: 0;
+  right: 0;
+  top: 9rpx;
+  height: 4rpx;
+}
+
+.ico-plus-v {
+  top: 0;
+  bottom: 0;
+  left: 9rpx;
+  width: 4rpx;
+}
+
+.ico-lines {
+  width: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 5rpx;
+}
+
+.ico-lines-row {
+  height: 3rpx;
+  border-radius: 2rpx;
+  background: $color-primary-dark;
+}
+
+.ico-lines-row.mid {
+  width: 86%;
+}
+
+.ico-lines-row.short {
+  width: 64%;
+}
+
+.modal-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+}
+
+.modal-panel {
+  position: fixed;
+  left: 48rpx;
+  right: 48rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  background: $color-card;
+  border-radius: 28rpx;
+  padding: 36rpx 32rpx 32rpx;
+  box-shadow: 0 16rpx 48rpx rgba(43, 127, 212, 0.18);
+  z-index: 201;
+  box-sizing: border-box;
+}
+
+.modal-panel--list {
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 24rpx;
+}
+
+.modal-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: $color-title;
+  margin-bottom: 24rpx;
+  text-align: center;
+}
+
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+.list-title {
+  margin-bottom: 0;
+  text-align: left;
+}
+
+.list-close {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: $color-subtitle;
+  padding: 8rpx 4rpx;
+}
+
+.list-empty {
+  padding: 64rpx 0;
+  text-align: center;
+  font-size: 28rpx;
+  color: $color-subtitle;
+}
+
+.quote-list-scroll {
+  max-height: 56vh;
+  margin-top: 12rpx;
+}
+
+.quote-list-item {
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid rgba(74, 159, 232, 0.12);
+}
+
+.quote-list-item:last-child {
+  border-bottom: none;
+}
+
+.quote-list-content {
+  display: block;
+  font-size: 28rpx;
+  color: $color-title;
+  line-height: 1.6;
+}
+
+.quote-list-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14rpx;
+}
+
+.quote-list-time {
+  font-size: 22rpx;
+  color: $color-subtitle;
+}
+
+.quote-list-actions {
+  display: flex;
+  gap: 24rpx;
+}
+
+.quote-link {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: $color-primary-dark;
+}
+
+.quote-link.danger {
+  color: #c45c5c;
+}
+
+.field-area {
+  width: 100%;
+  min-height: 200rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 16rpx;
+  box-sizing: border-box;
+  background: rgba(74, 159, 232, 0.08);
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  color: $color-title;
+  line-height: 1.6;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 12rpx;
+}
+
+.btn-cancel,
+.btn-confirm {
+  flex: 1;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 20rpx;
+  padding: 22rpx 0;
+}
+
+.btn-cancel {
+  color: $color-subtitle;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.btn-confirm {
+  color: #fff;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-dark 100%);
+}
+
+.btn-confirm.disabled {
+  opacity: 0.6;
 }
 
 .entry-section {
@@ -1009,19 +1494,19 @@ function handleEntryTap(item) {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 20rpx;
+  gap: 14rpx;
 }
 
 .entry-card {
   box-sizing: border-box;
-  width: calc((100% - 40rpx) / 3);
+  width: calc((100% - 42rpx) / 4);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24rpx 12rpx 20rpx;
+  padding: 16rpx 6rpx 12rpx;
   background: $color-card-soft;
-  border-radius: 24rpx;
+  border-radius: 18rpx;
   border: 1rpx solid rgba(255, 255, 255, 0.92);
   box-shadow: $shadow-card-elevated;
   transform: translateY(0);
@@ -1038,17 +1523,21 @@ function handleEntryTap(item) {
 }
 
 .entry-icon-box {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 20rpx;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 16rpx;
   background: linear-gradient(145deg, $color-primary 0%, $color-primary-dark 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 14rpx;
+  margin-bottom: 10rpx;
   flex-shrink: 0;
   box-sizing: border-box;
   box-shadow: $shadow-icon;
+}
+
+.entry-icon-box > view {
+  transform: scale(0.78);
 }
 
 /* 记事本：书脊 + 内页粗线 */
@@ -1227,38 +1716,41 @@ function handleEntryTap(item) {
   background: linear-gradient(180deg, rgba(74, 159, 232, 0.2) 0%, rgba(74, 159, 232, 0.08) 100%);
 }
 
-.icon-life {
+.icon-diet {
   position: relative;
   width: 44rpx;
   height: 44rpx;
 }
 
-.icon-life-ring {
+.icon-diet-plate {
   position: absolute;
-  inset: 4rpx;
+  left: 4rpx;
+  right: 4rpx;
+  top: 10rpx;
+  bottom: 6rpx;
   border-radius: 50%;
-  border: 4rpx solid $color-primary;
-  border-top-color: transparent;
+  border: 4rpx solid rgba(255, 255, 255, 0.92);
+  box-sizing: border-box;
 }
 
-.icon-life-arrow {
+.icon-diet-leaf {
   position: absolute;
-  top: 2rpx;
-  right: 8rpx;
-  width: 0;
-  height: 0;
-  border-left: 8rpx solid transparent;
-  border-right: 8rpx solid transparent;
-  border-bottom: 12rpx solid $color-primary;
+  right: 6rpx;
+  top: 4rpx;
+  width: 14rpx;
+  height: 20rpx;
+  border-radius: 0 12rpx 12rpx 12rpx;
+  background: rgba(255, 255, 255, 0.88);
+  transform: rotate(28deg);
 }
 
 .entry-name {
   display: block;
   width: 100%;
-  font-size: 24rpx;
+  font-size: 20rpx;
   font-weight: 600;
   color: $color-title;
-  letter-spacing: 1rpx;
+  letter-spacing: 0.5rpx;
   text-align: center;
   overflow: hidden;
   white-space: nowrap;

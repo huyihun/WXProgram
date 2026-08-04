@@ -7,14 +7,24 @@
 
       <view class="mood-grid">
         <view
-          v-for="item in MOOD_OPTIONS"
+          v-for="item in moodList"
           :key="item.key"
           class="mood-item"
           :class="{ active: selectedKey === item.key }"
-          :style="moodItemStyle(item.key)"
+          :style="moodItemStyle(item)"
           @tap="handleSelectMood(item)"
         >
-          <text class="mood-emoji">{{ item.emoji }}</text>
+          <view class="mood-img-wrap" :style="placeholderStyle(item)">
+            <image
+              v-if="item.imageUrl"
+              class="mood-img"
+              :class="{ 'is-ready': readyKeys[item.key] }"
+              :src="item.imageUrl"
+              mode="aspectFit"
+              @load="onImgReady(item.key)"
+              @error="onImgReady(item.key)"
+            />
+          </view>
           <text class="mood-label">{{ item.label }}</text>
         </view>
       </view>
@@ -23,8 +33,13 @@
 </template>
 
 <script setup>
-import { MOOD_OPTIONS, getMoodByDate, upsertMood, getToday } from '@/api/notebook'
-import { applyMoodTheme, MOOD_THEMES } from '@/utils/moodTheme'
+import { getMoodByDate, upsertMood, getToday } from '@/api/notebook'
+import {
+  listMoodEmojis,
+  getMoodCatalogWithUrls,
+  getCachedMoodImageUrl,
+} from '@/api/moodCatalog'
+import { applyMoodThemeFromItem, registerMoodThemes } from '@/utils/moodTheme'
 
 const props = defineProps({
   show: {
@@ -38,15 +53,85 @@ const emit = defineEmits(['close', 'change'])
 const today = getToday()
 const selectedKey = ref('')
 const saving = ref(false)
+const moodList = ref([])
+const readyKeys = ref({})
 
 watch(
   () => props.show,
   (open) => {
-    if (open) loadTodayMood()
+    if (open) {
+      loadCatalog()
+      loadTodayMood()
+    }
   }
 )
 
-/** 静默加载今日选中态，不展示加载中 */
+function buildFromCache(list) {
+  const next = []
+  let hit = 0
+  for (let i = 0; i < list.length; i++) {
+    const item = list[i]
+    const imageUrl = getCachedMoodImageUrl(item.fileID)
+    if (imageUrl) hit += 1
+    next.push(Object.assign({}, item, { imageUrl }))
+  }
+  return { next, hit }
+}
+
+function listFullyReady(list) {
+  if (!list || !list.length) return false
+  for (let i = 0; i < list.length; i++) {
+    if (!list[i].imageUrl) return false
+  }
+  return true
+}
+
+function markLocalReady(list) {
+  // 本地路径通常同步可用，直接标 ready，避免淡入闪一下
+  const map = Object.assign({}, readyKeys.value)
+  for (let i = 0; i < list.length; i++) {
+    const url = list[i].imageUrl || ''
+    if (url && url.indexOf('http') !== 0) {
+      map[list[i].key] = true
+    }
+  }
+  readyKeys.value = map
+}
+
+async function loadCatalog() {
+  try {
+    // 二次打开：已有完整图则立刻展示，后台静默刷新
+    if (listFullyReady(moodList.value)) {
+      markLocalReady(moodList.value)
+      getMoodCatalogWithUrls().then((filled) => {
+        moodList.value = filled
+        markLocalReady(filled)
+      })
+      return
+    }
+
+    const list = await listMoodEmojis()
+    registerMoodThemes(list)
+
+    const cached = buildFromCache(list)
+    moodList.value = cached.next
+    markLocalReady(cached.next)
+
+    if (cached.hit >= list.length && list.length) return
+
+    const filled = await getMoodCatalogWithUrls()
+    moodList.value = filled
+    markLocalReady(filled)
+  } catch (err) {
+    console.error('加载心情目录失败', err)
+  }
+}
+
+function onImgReady(key) {
+  if (readyKeys.value[key]) return
+  readyKeys.value = Object.assign({}, readyKeys.value, { [key]: true })
+}
+
 async function loadTodayMood() {
   try {
     const todayData = await getMoodByDate(today)
@@ -56,10 +141,15 @@ async function loadTodayMood() {
   }
 }
 
-function moodItemStyle(key) {
-  const theme = MOOD_THEMES[key]
-  if (!theme) return {}
-  return { '--mood-primary': theme['--color-primary'] }
+function moodItemStyle(item) {
+  const primary = item.theme && item.theme.primary
+  if (!primary) return {}
+  return { '--mood-primary': primary }
+}
+
+function placeholderStyle(item) {
+  const primary = (item.theme && item.theme.primary) || '#8B5E3C'
+  return { backgroundColor: primary + '22' }
 }
 
 async function handleSelectMood(item) {
@@ -71,7 +161,7 @@ async function handleSelectMood(item) {
   }
 
   selectedKey.value = item.key
-  applyMoodTheme(item.key)
+  applyMoodThemeFromItem(item)
   saving.value = true
   try {
     await upsertMood({
@@ -143,15 +233,15 @@ async function handleSelectMood(item) {
 
 .mood-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16rpx;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
 }
 
 .mood-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 22rpx 10rpx;
+  padding: 16rpx 6rpx;
   background: rgba(0, 0, 0, 0.03);
   border: 2rpx solid transparent;
   border-radius: 20rpx;
@@ -163,13 +253,31 @@ async function handleSelectMood(item) {
   box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.06);
 }
 
-.mood-emoji {
-  font-size: 48rpx;
+.mood-img-wrap {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 18rpx;
   margin-bottom: 8rpx;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mood-img {
+  width: 64rpx;
+  height: 64rpx;
+  opacity: 0;
+  transition: opacity 0.28s ease;
+}
+
+.mood-img.is-ready {
+  opacity: 1;
 }
 
 .mood-label {
-  font-size: 24rpx;
+  font-size: 20rpx;
   color: $color-title;
+  text-align: center;
 }
 </style>

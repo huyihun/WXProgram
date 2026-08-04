@@ -1,0 +1,53 @@
+---
+description: 云存储资源必须先换 HTTPS 临时链再播放/展示，禁止 cloud:// 直塞 image/video/audio
+alwaysApply: true
+---
+
+# 云存储媒体加载规范
+
+## 核心结论
+
+微信小程序里，`<image>` / `<video>` / `InnerAudioContext` **不能直接使用** `cloud://...` fileID。
+
+把 `cloud://` 当 `src` 时，运行时会当成**本地相对路径**（如 `/components/cloud://...`），导致 500 / 加载失败。
+
+## 正确做法
+
+1. 业务数据可长期保存 `cloud://` fileID（库表、本地 catalog、playlist 等）
+2. **真正加载前**，必须先换成 HTTPS 临时链接
+3. 本项目统一走云函数 `getMusicUrl`（已支持单条 `fileID` 与批量 `fileList`）
+
+```javascript
+// ✅ 正确：先换链，再给 image/audio/video 用
+const res = await wx.cloud.callFunction({
+  name: 'getMusicUrl',
+  data: { fileList: [fileID] },
+})
+const httpsUrl = res.result.urls[fileID]
+// <image :src="httpsUrl" />
+
+// ❌ 禁止：直接把 cloud:// 塞进 src
+// <image :src="item.fileID" />
+// imageUrl = item.fileID
+```
+
+## 现有参考实现
+
+- 音乐：`src/utils/playlist.js` 存 fileID → 播放前 `getMusicUrl`
+- 天气特效：`src/utils/weatherFx.js` 同理
+- 心情 emoji：`src/api/moodCatalog.js` 的 `resolveMoodImageUrls` → `MoodPicker.vue` 只用返回的 HTTPS `imageUrl`
+
+## 换链失败时
+
+- **不要**回退到 `cloud://` 当作图片/音视频 src
+- 显示占位（首字、默认图、空态）即可；有 HTTPS 才赋值给 `src`
+
+## 云函数白名单
+
+`getMusicUrl` 只允许特定路径（如 `/music/`、`/fx/`、`/mood/`）。新增云目录资源时，先扩白名单再换链。
+
+## 禁止事项
+
+- 不要对小程序端写 `wx.cloud.getTempFileURL` 直调（权限/一致性问题）；统一用 `getMusicUrl`
+- 不要把换链逻辑拆成多余抽象；跟现有 `resolveMoodImageUrls` / 播放器换链写法保持一致
+- 不要在规则外“优化”成 CDN 永久链，除非产品明确要求并改云侧配置

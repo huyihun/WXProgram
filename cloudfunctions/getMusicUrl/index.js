@@ -1,6 +1,7 @@
 /**
  * 用云函数管理端权限读云存储：
- * - 默认：换临时 HTTPS（音乐 / 特效）
+ * - 默认：换临时 HTTPS（音乐 / 特效 / 心情图）
+ * - fileList：批量换链
  * - asJson：直接返回 JSON 内容（小说，避免真机 request 合法域名）
  * - action=delete：删除云存储音乐文件（仅 /music/）
  */
@@ -8,21 +9,52 @@ const cloud = require('wx-server-sdk')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
+function isAllowedPath(id) {
+  const s = String(id || '')
+  return (
+    s.indexOf('/music/') >= 0 ||
+    s.indexOf('/fx/') >= 0 ||
+    s.indexOf('/book/') >= 0 ||
+    s.indexOf('/books/') >= 0 ||
+    s.indexOf('/mood/') >= 0
+  )
+}
+
 exports.main = async (event) => {
+  // 批量换临时链（心情表情）
+  const batch = event && event.fileList
+  if (batch && batch.length) {
+    const list = []
+    for (let i = 0; i < batch.length; i++) {
+      if (isAllowedPath(batch[i])) list.push(batch[i])
+    }
+    if (!list.length) {
+      return { ok: false, errMsg: '非法文件路径' }
+    }
+    try {
+      const res = await cloud.getTempFileURL({ fileList: list })
+      const fileList = (res && res.fileList) || []
+      const urls = {}
+      for (let i = 0; i < fileList.length; i++) {
+        const row = fileList[i]
+        if (row.fileID && row.tempFileURL) urls[row.fileID] = row.tempFileURL
+      }
+      return { ok: true, urls }
+    } catch (err) {
+      return {
+        ok: false,
+        errMsg: (err && err.message) || '批量获取临时链接异常',
+      }
+    }
+  }
+
   const fileID = event && event.fileID
   if (!fileID) {
     return { ok: false, errMsg: '缺少 fileID' }
   }
 
-  // 只允许歌单 / 特效 / 小说 / 游戏目录，避免任意文件被换链
   const id = String(fileID)
-  const allowed =
-    id.indexOf('/music/') >= 0 ||
-    id.indexOf('/fx/') >= 0 ||
-    id.indexOf('/book/') >= 0 ||
-    id.indexOf('/books/') >= 0 ||
-    id.indexOf('/game/') >= 0
-  if (!allowed) {
+  if (!isAllowedPath(id)) {
     return { ok: false, errMsg: '非法文件路径' }
   }
 

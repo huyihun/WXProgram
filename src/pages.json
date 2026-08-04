@@ -75,19 +75,10 @@
       "style": {
         "disableSwipeBack": true
       }
-    }
-  ],
-  "subPackages": [
+    },
     {
-      "root": "pages/game",
-      "pages": [
-        {
-          "path": "lifeRestart/index",
-          "style": {
-            "backgroundColor": "#0f1319"
-          }
-        }
-      ]
+      "path": "pages/diet/index",
+      "style": {}
     }
   ],
   "globalStyle": {

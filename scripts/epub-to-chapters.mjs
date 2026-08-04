@@ -1,9 +1,12 @@
 /**
  * 将东野圭吾 epub 转为「一书一 JSON」，供小程序云存储阅读
  *
- * 用法：node scripts/epub-to-chapters.mjs
+ * 用法：把源 epub 放到 xiaoshuo/…（见 SOURCE_DIR）后执行
+ *       node scripts/epub-to-chapters.mjs
  * 输出：books-dist/dongye/{bookId}.json（含全部章节）
  *       books-dist/dongye/catalog.json
+ *
+ * 注：xiaoshuo / books-dist 已 gitignore，仅本地转换用，不进仓库。
  */
 import fs from 'fs'
 import path from 'path'

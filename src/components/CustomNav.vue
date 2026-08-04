@@ -21,7 +21,7 @@ const props = defineProps({
     type: Boolean,
     default: undefined,
   },
-  /** 深色页（如人生重开）：弱化成半透明条，不抢戏 */
+  /** 深色页：弱化成半透明条，不抢戏 */
   dark: {
     type: Boolean,
     default: false,

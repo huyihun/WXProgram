@@ -1,5 +1,5 @@
 <script setup>
-import { restoreMoodTheme, applyMoodTheme } from '@/utils/moodTheme'
+import { restoreMoodTheme } from '@/utils/moodTheme'
 import { loadOwnerFlag } from '@/utils/owner'
 
 //云开发环境ID cloudbase-d7g0orq1z360a029f
@@ -50,11 +50,24 @@ async function restoreSuperVipMusic() {
 
 async function syncTodayMoodTheme() {
   try {
+    const { listMoodEmojis, getMoodEmojiByKey, prefetchMoodCatalog } = await import(
+      '@/api/moodCatalog'
+    )
     const { getMoodByDate, getToday } = await import('@/api/notebook')
+    const { applyMoodThemeFromItem, registerMoodThemes } = await import('@/utils/moodTheme')
+    const list = await listMoodEmojis()
+    registerMoodThemes(list)
     const data = await getMoodByDate(getToday())
+    let item = null
     if (data && data.moodKey) {
-      applyMoodTheme(data.moodKey)
+      item = await getMoodEmojiByKey(data.moodKey)
     }
+    if (!item && list.length) {
+      item = list[0]
+    }
+    if (item) applyMoodThemeFromItem(item)
+    // 后台预换链，打开心情选择器时尽量秒开
+    prefetchMoodCatalog()
   } catch (err) {
     console.error('同步今日心情主题失败', err)
   }
