@@ -1,0 +1,402 @@
+[
+  {
+    "id": 1,
+    "file": "圆梦精品素材 (81).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (81).png",
+    "key": "grinning",
+    "label": "开怀",
+    "sort": 1,
+    "enabled": true,
+    "theme": {
+      "primary": "#F5B800",
+      "primaryDark": "#D49A00",
+      "bg": "#FFF8E1",
+      "nav": "#FFF3C4",
+      "title": "#4A3800",
+      "subtitle": "#B8860B",
+      "cardSoft": "#FFFDF5",
+      "gradientHero": "linear-gradient(180deg, #FFE082 0%, #FFF8E1 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (81).png"
+  },
+  {
+    "id": 2,
+    "file": "圆梦精品素材 (8).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (8).png",
+    "key": "content",
+    "label": "满足",
+    "sort": 2,
+    "enabled": true,
+    "theme": {
+      "primary": "#E8916A",
+      "primaryDark": "#C46E48",
+      "bg": "#FFF1EA",
+      "nav": "#FFE4D6",
+      "title": "#4A2A1A",
+      "subtitle": "#C46E48",
+      "cardSoft": "#FFF9F6",
+      "gradientHero": "linear-gradient(180deg, #FFCCB0 0%, #FFF1EA 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (8).png"
+  },
+  {
+    "id": 3,
+    "file": "圆梦精品素材 (10).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (10).png",
+    "key": "loved",
+    "label": "心动",
+    "sort": 3,
+    "enabled": true,
+    "theme": {
+      "primary": "#E91E63",
+      "primaryDark": "#C2185B",
+      "bg": "#FCE4EC",
+      "nav": "#F8BBD0",
+      "title": "#4A0E28",
+      "subtitle": "#C2185B",
+      "cardSoft": "#FFF5F8",
+      "gradientHero": "linear-gradient(180deg, #F48FB1 0%, #FCE4EC 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (10).png"
+  },
+  {
+    "id": 4,
+    "file": "圆梦精品素材 (87).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (87).png",
+    "key": "cool_smile",
+    "label": "自信",
+    "sort": 4,
+    "enabled": true,
+    "theme": {
+      "primary": "#00897B",
+      "primaryDark": "#00695C",
+      "bg": "#E0F2F1",
+      "nav": "#B2DFDB",
+      "title": "#003D36",
+      "subtitle": "#00695C",
+      "cardSoft": "#F1FAF9",
+      "gradientHero": "linear-gradient(180deg, #80CBC4 0%, #E0F2F1 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (87).png"
+  },
+  {
+    "id": 5,
+    "file": "圆梦精品素材 (12).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (12).png",
+    "key": "wink",
+    "label": "俏皮",
+    "sort": 5,
+    "enabled": true,
+    "theme": {
+      "primary": "#FF7043",
+      "primaryDark": "#E64A19",
+      "bg": "#FBE9E7",
+      "nav": "#FFCCBC",
+      "title": "#4A1808",
+      "subtitle": "#E64A19",
+      "cardSoft": "#FFF6F3",
+      "gradientHero": "linear-gradient(180deg, #FFAB91 0%, #FBE9E7 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (12).png"
+  },
+  {
+    "id": 6,
+    "file": "圆梦精品素材 (13).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (13).png",
+    "key": "flushed",
+    "label": "害羞",
+    "sort": 6,
+    "enabled": true,
+    "theme": {
+      "primary": "#EC407A",
+      "primaryDark": "#C2185B",
+      "bg": "#FFF0F5",
+      "nav": "#FCE4EC",
+      "title": "#4A1A2E",
+      "subtitle": "#AD1457",
+      "cardSoft": "#FFFBFC",
+      "gradientHero": "linear-gradient(180deg, #F8BBD9 0%, #FFF0F5 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (13).png"
+  },
+  {
+    "id": 7,
+    "file": "圆梦精品素材 (6).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (6).png",
+    "key": "smirk",
+    "label": "得意",
+    "sort": 7,
+    "enabled": true,
+    "theme": {
+      "primary": "#7E57C2",
+      "primaryDark": "#5E35B1",
+      "bg": "#EDE7F6",
+      "nav": "#D1C4E9",
+      "title": "#2A1548",
+      "subtitle": "#5E35B1",
+      "cardSoft": "#F8F5FC",
+      "gradientHero": "linear-gradient(180deg, #B39DDB 0%, #EDE7F6 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (6).png"
+  },
+  {
+    "id": 8,
+    "file": "圆梦精品素材 (11).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (11).png",
+    "key": "sad",
+    "label": "难过",
+    "sort": 8,
+    "enabled": true,
+    "theme": {
+      "primary": "#5C7C9A",
+      "primaryDark": "#3E5A73",
+      "bg": "#E8EEF4",
+      "nav": "#D5DEE8",
+      "title": "#1E2A38",
+      "subtitle": "#5C7C9A",
+      "cardSoft": "#F4F7FA",
+      "gradientHero": "linear-gradient(180deg, #A8BDD0 0%, #E8EEF4 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (11).png"
+  },
+  {
+    "id": 9,
+    "file": "圆梦精品素材 (73).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (73).png",
+    "key": "teary",
+    "label": "委屈",
+    "sort": 9,
+    "enabled": true,
+    "theme": {
+      "primary": "#42A5F5",
+      "primaryDark": "#1E88E5",
+      "bg": "#E3F2FD",
+      "nav": "#BBDEFB",
+      "title": "#0D3A5C",
+      "subtitle": "#1565C0",
+      "cardSoft": "#F5FAFE",
+      "gradientHero": "linear-gradient(180deg, #90CAF9 0%, #E3F2FD 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (73).png"
+  },
+  {
+    "id": 10,
+    "file": "圆梦精品素材 (45).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (45).png",
+    "key": "anxious",
+    "label": "焦虑",
+    "sort": 10,
+    "enabled": true,
+    "theme": {
+      "primary": "#9E9D24",
+      "primaryDark": "#827717",
+      "bg": "#F5F5E6",
+      "nav": "#E6E6C8",
+      "title": "#3A3A10",
+      "subtitle": "#827717",
+      "cardSoft": "#FAFAF2",
+      "gradientHero": "linear-gradient(180deg, #DCE775 0%, #F5F5E6 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (45).png"
+  },
+  {
+    "id": 11,
+    "file": "圆梦精品素材 (38).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (38).png",
+    "key": "angry",
+    "label": "愤怒",
+    "sort": 11,
+    "enabled": true,
+    "theme": {
+      "primary": "#E53935",
+      "primaryDark": "#C62828",
+      "bg": "#FFEBEE",
+      "nav": "#FFCDD2",
+      "title": "#4A0A0A",
+      "subtitle": "#C62828",
+      "cardSoft": "#FFF5F5",
+      "gradientHero": "linear-gradient(180deg, #EF9A9A 0%, #FFEBEE 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (38).png"
+  },
+  {
+    "id": 12,
+    "file": "圆梦精品素材 (17).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (17).png",
+    "key": "overwhelmed",
+    "label": "崩溃",
+    "sort": 12,
+    "enabled": true,
+    "theme": {
+      "primary": "#AB47BC",
+      "primaryDark": "#8E24AA",
+      "bg": "#F3E5F5",
+      "nav": "#E1BEE7",
+      "title": "#3A0A42",
+      "subtitle": "#8E24AA",
+      "cardSoft": "#FAF4FB",
+      "gradientHero": "linear-gradient(180deg, #CE93D8 0%, #F3E5F5 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (17).png"
+  },
+  {
+    "id": 13,
+    "file": "圆梦精品素材 (24).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (24).png",
+    "key": "drained",
+    "label": "虚脱",
+    "sort": 13,
+    "enabled": true,
+    "theme": {
+      "primary": "#8D6E63",
+      "primaryDark": "#6D4C41",
+      "bg": "#EFEBE9",
+      "nav": "#D7CCC8",
+      "title": "#3E2723",
+      "subtitle": "#6D4C41",
+      "cardSoft": "#F7F5F4",
+      "gradientHero": "linear-gradient(180deg, #BCAAA4 0%, #EFEBE9 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (24).png"
+  },
+  {
+    "id": 14,
+    "file": "圆梦精品素材 (50).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (50).png",
+    "key": "sleeping",
+    "label": "睡觉",
+    "sort": 14,
+    "enabled": true,
+    "theme": {
+      "primary": "#3949AB",
+      "primaryDark": "#283593",
+      "bg": "#E8EAF6",
+      "nav": "#C5CAE9",
+      "title": "#1A237E",
+      "subtitle": "#303F9F",
+      "cardSoft": "#F4F5FB",
+      "gradientHero": "linear-gradient(180deg, #9FA8DA 0%, #E8EAF6 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (50).png"
+  },
+  {
+    "id": 15,
+    "file": "圆梦精品素材 (88).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (88).png",
+    "key": "bored",
+    "label": "无聊",
+    "sort": 15,
+    "enabled": true,
+    "theme": {
+      "primary": "#78909C",
+      "primaryDark": "#546E7A",
+      "bg": "#ECEFF1",
+      "nav": "#CFD8DC",
+      "title": "#263238",
+      "subtitle": "#546E7A",
+      "cardSoft": "#F5F7F8",
+      "gradientHero": "linear-gradient(180deg, #B0BEC5 0%, #ECEFF1 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (88).png"
+  },
+  {
+    "id": 16,
+    "file": "圆梦精品素材 (4).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (4).png",
+    "key": "blank",
+    "label": "茫然",
+    "sort": 16,
+    "enabled": true,
+    "theme": {
+      "primary": "#4DB6AC",
+      "primaryDark": "#00897B",
+      "bg": "#E0F7F5",
+      "nav": "#B2DFDB",
+      "title": "#004D40",
+      "subtitle": "#00897B",
+      "cardSoft": "#F2FBFA",
+      "gradientHero": "linear-gradient(180deg, #80CBC4 0%, #E0F7F5 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (4).png"
+  },
+  {
+    "id": 17,
+    "file": "圆梦精品素材 (9).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (9).png",
+    "key": "shocked",
+    "label": "惊吓",
+    "sort": 17,
+    "enabled": true,
+    "theme": {
+      "primary": "#00BCD4",
+      "primaryDark": "#0097A7",
+      "bg": "#E0F7FA",
+      "nav": "#B2EBF2",
+      "title": "#004D56",
+      "subtitle": "#00838F",
+      "cardSoft": "#F0FCFD",
+      "gradientHero": "linear-gradient(180deg, #4DD0E1 0%, #E0F7FA 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (9).png"
+  },
+  {
+    "id": 18,
+    "file": "圆梦精品素材 (29).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (29).png",
+    "key": "pensive",
+    "label": "沉思",
+    "sort": 18,
+    "enabled": true,
+    "theme": {
+      "primary": "#43A047",
+      "primaryDark": "#2E7D32",
+      "bg": "#E8F5E9",
+      "nav": "#C8E6C9",
+      "title": "#1B3A1D",
+      "subtitle": "#2E7D32",
+      "cardSoft": "#F4FAF4",
+      "gradientHero": "linear-gradient(180deg, #A5D6A7 0%, #E8F5E9 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (29).png"
+  },
+  {
+    "id": 19,
+    "file": "圆梦精品素材 (20).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (20).png",
+    "key": "goofy",
+    "label": "憨笑",
+    "sort": 19,
+    "enabled": true,
+    "theme": {
+      "primary": "#7CB342",
+      "primaryDark": "#558B2F",
+      "bg": "#F1F8E9",
+      "nav": "#DCEDC8",
+      "title": "#2E3B12",
+      "subtitle": "#558B2F",
+      "cardSoft": "#F8FBF3",
+      "gradientHero": "linear-gradient(180deg, #AED581 0%, #F1F8E9 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (20).png"
+  },
+  {
+    "id": 20,
+    "file": "圆梦精品素材 (82).png",
+    "cloudPath": "mood/emoji/圆梦精品素材 (82).png",
+    "key": "gentle",
+    "label": "温和",
+    "sort": 20,
+    "enabled": true,
+    "theme": {
+      "primary": "#8B5E3C",
+      "primaryDark": "#6B4423",
+      "bg": "#F3EBE3",
+      "nav": "#EDE2D6",
+      "title": "#3E2723",
+      "subtitle": "#8D6E63",
+      "cardSoft": "#FAF6F2",
+      "gradientHero": "linear-gradient(180deg, #E8D5C4 0%, #F6F0EA 100%)"
+    },
+    "fileID": "cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/mood/emoji/圆梦精品素材 (82).png"
+  }
+]

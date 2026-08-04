@@ -1,0 +1,67 @@
+---
+description: 页面必须基于 PageRoot 公共根组件
+globs: src/pages/**/*.vue
+alwaysApply: true
+---
+
+# 页面根组件规范
+
+## 必须使用 PageRoot
+
+每个页面（`src/pages/**/*.vue`）的根节点必须是 [`PageRoot`](src/components/PageRoot.vue)，**禁止**再手写：
+
+- `<view class="page">`
+- 页面内单独放 `<CustomNav />`
+- 页面级重复的 `min-height: 100vh` / 背景色 / 顶栏内边距
+
+`PageRoot` 已内置：自定义导航、页面容器、默认内容区内边距。
+
+## 标准写法
+
+```vue
+<template>
+  <PageRoot>
+    <!-- 页面内容 -->
+  </PageRoot>
+</template>
+```
+
+## 常用 props
+
+| prop              | 说明                                        |
+| ----------------- | ------------------------------------------- |
+| 默认              | 自动返回键 + 浅蓝底 + 内容区 `32rpx` 内边距 |
+| `:back="false"`   | 首页等：隐藏返回键                          |
+| `flush`           | 去掉内容区内边距（完全自定义布局）          |
+| `hero`            | 使用渐变英雄背景                            |
+| `bottom="160rpx"` | 有底部固定栏时加大底部留白                  |
+
+### 首页示例
+
+```vue
+<template>
+  <PageRoot :back="false" flush hero>
+    <!-- 自定义布局 -->
+  </PageRoot>
+</template>
+```
+
+### 有底部固定栏示例
+
+```vue
+<template>
+  <PageRoot bottom="160rpx">
+    <!-- 列表 + 固定底栏 -->
+  </PageRoot>
+</template>
+```
+
+## 与导航栏的关系
+
+- 不要在页面里再写 `<CustomNav />`，由 `PageRoot` 统一引入
+- 返回样式仍由 [`CustomNav`](src/components/CustomNav.vue) 维护，详见导航栏规范
+
+## 禁止事项
+
+- 不要在新页面里复制 `CustomNav` + `.page` 外壳
+- 不要绕过 `PageRoot` 直接用系统导航栏
