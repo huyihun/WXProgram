@@ -7,7 +7,15 @@ import { loadOwnerFlag } from '@/utils/owner'
  * 应用启动时初始化微信云开发，并恢复心情主题
  * 注意：勿在 init 前静态 import notebook（会触发 database() 导致白屏）
  * owner 只调 login 云函数，可静态引入
+ *
+ * 动态 import 在小程序打包后，命名导出可能挂在 module 或 module.default 上
  */
+function pickExport(mod, name) {
+  if (mod && typeof mod[name] === 'function') return mod[name]
+  if (mod && mod.default && typeof mod.default[name] === 'function') return mod.default[name]
+  return null
+}
+
 onLaunch(() => {
   restoreMoodTheme()
 
@@ -26,7 +34,6 @@ onLaunch(() => {
     loadOwnerIdentity()
   }, 300)
   syncTodayMoodTheme()
-  restoreSuperVipMusic()
   warmMusic()
 })
 
@@ -39,19 +46,21 @@ async function loadOwnerIdentity() {
   }
 }
 
-async function restoreSuperVipMusic() {
-  try {
-    const { loadAppVersionFromCloud } = await import('@/utils/vipMode')
-    await loadAppVersionFromCloud()
-  } catch (err) {
-    console.error('同步超级VIP音乐失败', err)
-  }
-}
-
 async function syncTodayMoodTheme() {
   try {
-    const { getMoodByDate, getToday } = await import('@/api/notebook')
-    const data = await getMoodByDate(getToday())
+    const mod = await import('@/api/notebook')
+    const getMoodByDate = pickExport(mod, 'getMoodByDate')
+    if (!getMoodByDate) return
+
+    const now = new Date()
+    const today =
+      now.getFullYear() +
+      '-' +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      '-' +
+      String(now.getDate()).padStart(2, '0')
+
+    const data = await getMoodByDate(today)
     if (data && data.moodKey) {
       applyMoodTheme(data.moodKey)
     }
@@ -62,12 +71,22 @@ async function syncTodayMoodTheme() {
 
 async function warmMusic() {
   try {
-    const { SUPER_VIP_PLAYLIST, warmMusicCache, syncMusicPrefs } = await import(
-      '@/utils/playlist'
-    )
+    const playlistMod = await import('@/utils/playlist')
+    const prefsMod = await import('@/api/musicPrefs')
+    const syncMusicPrefs = pickExport(playlistMod, 'syncMusicPrefs')
+    const getPlaylistByMode = pickExport(playlistMod, 'getPlaylistByMode')
+    const warmMusicCache = pickExport(playlistMod, 'warmMusicCache')
+    const MUSIC_MODE_VIP = playlistMod && playlistMod.MUSIC_MODE_VIP
+    const getDefaultMusicMode = pickExport(prefsMod, 'getDefaultMusicMode')
+    if (!syncMusicPrefs || !getPlaylistByMode || !warmMusicCache || !getDefaultMusicMode) return
+
     await syncMusicPrefs()
-    if (SUPER_VIP_PLAYLIST && SUPER_VIP_PLAYLIST[0]) {
-      await warmMusicCache(SUPER_VIP_PLAYLIST[0])
+    const defaultMode = getDefaultMusicMode()
+    // 母带过大不预热；仅 VIP mp3 走本地缓存预热
+    if (defaultMode !== MUSIC_MODE_VIP) return
+    const list = getPlaylistByMode(defaultMode)
+    if (list && list[0]) {
+      await warmMusicCache(list[0])
     }
   } catch (err) {
     console.error('预热音乐缓存失败', err)

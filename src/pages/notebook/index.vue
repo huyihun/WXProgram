@@ -42,20 +42,6 @@ const modules = [
     path: '/pages/notebook/plan/index',
     iconClass: 'icon-plan',
   },
-  {
-    id: 'diary',
-    name: '写日记',
-    desc: '记录生活点滴',
-    path: '/pages/notebook/diary/index',
-    iconClass: 'icon-diary',
-  },
-  {
-    id: 'todo',
-    name: '待办事项',
-    desc: '管理任务清单',
-    path: '/pages/notebook/todo/index',
-    iconClass: 'icon-todo',
-  },
 ]
 
 function handleModuleTap(item) {
@@ -163,39 +149,6 @@ function handleModuleTap(item) {
   right: 6rpx;
   height: 3rpx;
   background: rgba(255, 255, 255, 0.7);
-}
-
-/* 日记图标：书页线条 */
-.icon-diary::before {
-  content: '';
-  position: absolute;
-  left: 4rpx;
-  top: 0;
-  width: 28rpx;
-  height: 36rpx;
-  border: 3rpx solid rgba(255, 255, 255, 0.9);
-  border-radius: 4rpx;
-}
-
-/* 待办图标：勾选框 */
-.icon-todo::before {
-  content: '';
-  position: absolute;
-  inset: 4rpx;
-  border: 3rpx solid rgba(255, 255, 255, 0.9);
-  border-radius: 6rpx;
-}
-
-.icon-todo::after {
-  content: '';
-  position: absolute;
-  left: 10rpx;
-  top: 14rpx;
-  width: 16rpx;
-  height: 10rpx;
-  border-left: 3rpx solid rgba(255, 255, 255, 0.8);
-  border-bottom: 3rpx solid rgba(255, 255, 255, 0.8);
-  transform: rotate(-45deg);
 }
 
 .module-info {

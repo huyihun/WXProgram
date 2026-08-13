@@ -49,7 +49,7 @@
         <text class="list-count">{{ todayList.length }} 笔</text>
       </view>
 
-      <view v-if="loading" class="status-tip">加载中...</view>
+      <PageLoading v-if="loading" />
       <view v-else-if="todayList.length === 0" class="status-tip">今天还没有支出</view>
       <view v-else class="expense-list">
         <view v-for="item in todayList" :key="item._id" class="expense-item">
@@ -94,7 +94,7 @@ const todayTotal = computed(() => {
   return sum
 })
 
-onShow(() => {
+onMounted(() => {
   loadToday()
   loadMonthTotal()
 })

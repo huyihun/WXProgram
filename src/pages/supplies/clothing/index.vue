@@ -12,7 +12,7 @@
         </view>
       </view>
 
-      <view v-if="loading" class="status-tip">加载中...</view>
+      <PageLoading v-if="loading" />
       <view v-else class="group-list">
         <view v-for="group in clothingGroups" :key="group.id" class="group-block">
           <view class="group-header" @tap="toggleGroup(group.id)">
@@ -188,7 +188,7 @@ const clothingGroups = computed(() => {
   }))
 })
 
-onShow(() => {
+onMounted(() => {
   loadList()
 })
 
@@ -376,13 +376,6 @@ async function handleDelete(item) {
   background: linear-gradient(135deg, $color-primary 0%, $color-primary-dark 100%);
   border-radius: 999rpx;
   padding: 12rpx 24rpx;
-}
-
-.status-tip {
-  padding: 48rpx 24rpx;
-  text-align: center;
-  font-size: 26rpx;
-  color: $color-subtitle;
 }
 
 .group-list {

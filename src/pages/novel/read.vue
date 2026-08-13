@@ -11,9 +11,7 @@
       <view class="reader-back-arrow" />
     </view>
 
-    <view v-if="booting" class="state">
-      <text class="state-text">打开中…</text>
-    </view>
+    <PageLoading v-if="booting" text="打开中" />
     <view v-else-if="loadError" class="state">
       <text class="state-text">{{ loadError }}</text>
     </view>
@@ -23,7 +21,6 @@
       :class="'theme-' + themeId"
       :style="readerVars"
     >
-      <!-- 主题化返回：固定在导航占位左侧，沉浸/呼出菜单均可点 -->
       <view
         class="reader-back reader-back--float"
         :class="{ 'is-chrome': chromeOpen }"
@@ -34,60 +31,69 @@
         <view class="reader-back-arrow" />
       </view>
 
-      <!-- 常态滚动阅读 -->
-      <scroll-view
-        v-show="!flipActive"
-        scroll-y
-        class="reader-scroll"
-        :scroll-top="scrollTop"
-        :show-scrollbar="false"
-        @scroll="onScroll"
+      <!-- 固定视口分页：不可上下滚动 -->
+      <view
+        class="reader-stage"
         @touchstart="onTouchStart"
+        @touchmove="onTouchMove"
         @touchend="onTouchEnd"
         @tap="onBodyTap"
       >
-        <view class="reader-content">
-          <text class="in-chap-title">{{ chapterTitle }}</text>
-          <text class="reader-body" user-select>{{ chapterContent }}</text>
-
-          <view class="chap-end">
+        <!-- 常态单页 -->
+        <view v-if="!flipActive" class="page-sheet">
+          <text v-if="currentPage.showTitle" class="in-chap-title">{{ chapterTitle }}</text>
+          <text class="reader-body" user-select>{{ currentPage.text }}</text>
+          <view v-if="currentPage.showEnd" class="chap-end">
             <view class="chap-end-line" />
             <text class="chap-end-text">{{ isLastChapter ? '全书完' : '本章完' }}</text>
-            <view
-              v-if="!isLastChapter"
-              class="chap-end-next"
-              hover-class="chap-end-next--active"
-              @tap.stop="goNext"
-            >
-              <text class="chap-end-next-text">点右侧或点击 · 下一章</text>
+          </view>
+          <view class="page-foot">
+            <text class="page-foot-text">{{ pageFootText }}</text>
+          </view>
+        </view>
+
+        <!-- 横向翻页：当前页滑出 + 目标页滑入 -->
+        <view v-else class="flip-stage" :class="'dir-' + turnDir + (flipRun ? ' is-run' : '')">
+          <view class="page-sheet flip-back">
+            <text v-if="backPage.showTitle" class="in-chap-title">{{ backPage.title }}</text>
+            <text class="reader-body">{{ backPage.text }}</text>
+            <view v-if="backPage.showEnd" class="chap-end">
+              <view class="chap-end-line" />
+              <text class="chap-end-text">{{ backPage.endLabel }}</text>
+            </view>
+            <view class="page-foot">
+              <text class="page-foot-text">{{ backPage.foot }}</text>
             </view>
           </view>
-          <view class="reader-tail" />
+          <view class="page-sheet flip-front">
+            <text v-if="frontPage.showTitle" class="in-chap-title">{{ frontPage.title }}</text>
+            <text class="reader-body">{{ frontPage.text }}</text>
+            <view v-if="frontPage.showEnd" class="chap-end">
+              <view class="chap-end-line" />
+              <text class="chap-end-text">{{ frontPage.endLabel }}</text>
+            </view>
+            <view class="page-foot">
+              <text class="page-foot-text">{{ frontPage.foot }}</text>
+            </view>
+          </view>
         </view>
-      </scroll-view>
 
-      <!-- 仿真折角翻书过渡 -->
-      <view v-if="flipActive" class="flip-stage" @touchmove.stop.prevent>
-        <view class="flip-page flip-back">
-          <text class="in-chap-title">{{ backTitle }}</text>
-          <text class="reader-body">{{ backPreview }}</text>
-        </view>
-        <view class="flip-page flip-front" :style="frontClipStyle">
-          <text class="in-chap-title">{{ frontTitle }}</text>
-          <text class="reader-body">{{ frontPreview }}</text>
-        </view>
-        <view class="flip-sheet-shadow" :style="sheetShadowStyle" />
-        <view class="flip-fold" :style="foldStyle" />
+        <!-- 左右热区提示（菜单打开时更明显） -->
+        <view class="edge-hint edge-hint--left" :class="{ show: chromeOpen }" />
+        <view class="edge-hint edge-hint--right" :class="{ show: chromeOpen }" />
       </view>
 
       <!-- 顶栏 -->
       <view class="chrome-top" :class="{ show: chromeOpen }" @tap.stop>
         <text class="chrome-book">{{ meta.title || '' }}</text>
         <text class="chrome-chap">{{ chapterTitle }}</text>
-        <text class="chrome-meta">{{ chapterIndex }} / {{ chapterCount }} · 本章 {{ chapterPct }}%</text>
+        <text class="chrome-meta">
+          {{ chapterIndex }} / {{ chapterCount }} 章 · 本页 {{ pageIndex + 1 }}/{{ pageCount }} ·
+          {{ bookPct }}%
+        </text>
       </view>
 
-      <!-- 底栏 -->
+      <!-- 底栏：上一页 / 目录 / 设置 / 下一页 -->
       <view class="chrome-bottom" :class="{ show: chromeOpen }" @tap.stop>
         <view class="progress-track">
           <view class="progress-fill" :style="{ width: bookPct + '%' }" />
@@ -95,11 +101,11 @@
         <view class="chrome-actions">
           <view
             class="chrome-btn ghost"
-            :class="{ disabled: chapterIndex <= 1 }"
+            :class="{ disabled: !canGoPrev }"
             hover-class="chrome-btn--active"
-            @tap="goPrev"
+            @tap="goPrevPage"
           >
-            <text class="chrome-btn-text">上一章</text>
+            <text class="chrome-btn-text">上一页</text>
           </view>
           <view class="chrome-btn" hover-class="chrome-btn--active" @tap="openToc">
             <text class="chrome-btn-text">目录</text>
@@ -109,11 +115,11 @@
           </view>
           <view
             class="chrome-btn ghost"
-            :class="{ disabled: isLastChapter }"
+            :class="{ disabled: !canGoNext }"
             hover-class="chrome-btn--active"
-            @tap="goNext"
+            @tap="goNextPage"
           >
-            <text class="chrome-btn-text">下一章</text>
+            <text class="chrome-btn-text">下一页</text>
           </view>
         </view>
       </view>
@@ -206,20 +212,25 @@ import {
 } from '@/api/novel'
 
 const PREFS_KEY = 'novelReaderPrefs'
-const TIP_KEY = 'novelReaderTipShown_v2'
+const TIP_KEY = 'novelReaderTipShown_v3'
 const FONT_MIN = 28
 const FONT_MAX = 44
 const FONT_STEP = 4
 const CHROME_HIDE_MS = 4000
-const EDGE_RATIO = 0.28
-const FLIP_MS = 480
-const PREVIEW_LEN = 2600
+const EDGE_RATIO = 0.32
+const FLIP_MS = 340
+const SWIPE_MIN = 48
+const PAD_X_RPX = 40
+const PAD_TOP_RPX = 28
+const PAD_BOTTOM_RPX = 72
+const TITLE_BLOCK_RPX = 54
+const END_BLOCK_RPX = 100
 
 const themes = [
+  { id: 'night', preview: '#2a2e38', bg: '#0c0e12', text: '#d2d6de', muted: '#7a8290' },
   { id: 'paper', preview: '#f3ead8', bg: '#f6f1e8', text: '#2c2416', muted: '#8a7a64' },
   { id: 'mint', preview: '#dce8dc', bg: '#e8f0e8', text: '#1f2e1f', muted: '#6a806a' },
   { id: 'sky', preview: '#d6eaf8', bg: '#e8f4fc', text: '#0f2d4a', muted: '#6b8fa8' },
-  { id: 'night', preview: '#2a2e38', bg: '#1a1d24', text: '#c8cdd6', muted: '#7a8290' },
 ]
 
 const lineHeightOptions = [
@@ -233,17 +244,17 @@ const meta = ref({ id: '', title: '', author: '', chapterCount: 0 })
 const chapterIndex = ref(1)
 const chapterTitle = ref('')
 const chapterContent = ref('')
+const pages = ref([])
+const pageIndex = ref(0)
+
 const booting = ref(true)
 const loadError = ref('')
-const scrollTop = ref(0)
-const turnDir = ref('next') // 'next' | 'prev'
+const turnDir = ref('next')
 
 const flipActive = ref(false)
-const flipCurl = ref(0)
-const frontTitle = ref('')
-const frontBody = ref('')
-const backTitle = ref('')
-const backBody = ref('')
+const flipRun = ref(false)
+const frontPage = ref(emptyPageView())
+const backPage = ref(emptyPageView())
 
 const chromeOpen = ref(false)
 const settingsOpen = ref(false)
@@ -252,171 +263,54 @@ const tocScrollInto = ref('')
 
 const fontSize = ref(32)
 const lineHeightId = ref('normal')
-const themeId = ref('sky')
+const themeId = ref('night')
 
-const chapterScrollRatio = ref(0)
 const animating = ref(false)
 const statusBarHeight = ref(20)
 const navBarHeight = ref(44)
+const windowWidth = ref(375)
+const windowHeight = ref(667)
 
 let touchX = 0
 let touchY = 0
 let lastTapX = 0
 let touchMoved = false
+let swipeLocked = false
 let chromeTimer = null
 let flipTimer = null
-let flipRaf = null
 
 const chapterCount = computed(() => Number(meta.value.chapterCount) || 0)
 const isLastChapter = computed(() => chapterIndex.value >= chapterCount.value)
+const pageCount = computed(() => {
+  const n = pages.value.length
+  return n > 0 ? n : 1
+})
 
-/** 与 CustomNav 导航行垂直居中对齐 */
+const currentPage = computed(() => {
+  const list = pages.value
+  if (!list.length) {
+    return { text: '', showTitle: true, showEnd: false }
+  }
+  let i = pageIndex.value
+  if (i < 0) i = 0
+  if (i >= list.length) i = list.length - 1
+  return list[i]
+})
+
+const pageFootText = computed(() => {
+  return chapterIndex.value + ' · ' + (pageIndex.value + 1) + '/' + pageCount.value
+})
+
+const canGoPrev = computed(() => chapterIndex.value > 1 || pageIndex.value > 0)
+const canGoNext = computed(() => {
+  if (pageIndex.value < pageCount.value - 1) return true
+  return chapterIndex.value < chapterCount.value
+})
+
 const readerBackStyle = computed(() => {
   const top = statusBarHeight.value + (navBarHeight.value - 32) / 2
   return { top: (top > 0 ? top : statusBarHeight.value + 6) + 'px' }
 })
-
-const frontPreview = computed(() => previewText(frontBody.value))
-const backPreview = computed(() => previewText(backBody.value))
-
-const curlGeom = computed(() => calcCurlGeometry(flipCurl.value, turnDir.value))
-
-const frontClipStyle = computed(() => {
-  const clip = curlGeom.value.clip
-  return 'clip-path:' + clip + ';-webkit-clip-path:' + clip
-})
-
-const foldStyle = computed(() => {
-  const f = curlGeom.value.fold
-  if (!f) return { opacity: 0 }
-  return {
-    left: f.left,
-    top: f.top,
-    width: f.width,
-    height: (f.height || 24) + 'rpx',
-    opacity: String(f.opacity),
-    transform: 'translate(-50%, -50%) rotate(' + f.angle + 'deg)',
-  }
-})
-
-const sheetShadowStyle = computed(() => {
-  const s = curlGeom.value.shadow
-  if (!s) return { opacity: 0 }
-  return {
-    left: s.left,
-    top: s.top,
-    width: s.width,
-    height: s.height,
-    opacity: String(s.opacity),
-    transform: 'translate(-50%, -50%) rotate(' + s.angle + 'deg)',
-  }
-})
-
-function previewText(s) {
-  const t = String(s || '')
-  if (t.length <= PREVIEW_LEN) return t
-  return t.slice(0, PREVIEW_LEN) + '…'
-}
-
-function easeInOut(t) {
-  if (t < 0.5) return 2 * t * t
-  return 1 - Math.pow(-2 * t + 2, 2) / 2
-}
-
-/** 折角几何：下一章右下掀起，上一章左下掀起 */
-function calcCurlGeometry(curl, dir) {
-  let t = Number(curl) || 0
-  if (t < 0) t = 0
-  if (t > 1) t = 1
-  const e = easeInOut(t)
-  if (e <= 0.001) {
-    return {
-      clip: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)',
-      fold: null,
-      shadow: null,
-    }
-  }
-
-  if (dir === 'prev') {
-    const leftY = 100 - e * 108
-    const bottomX = e * 108
-    const clip =
-      'polygon(0% 0%, 100% 0%, 100% 100%, ' +
-      bottomX +
-      '% 100%, 0% ' +
-      leftY +
-      '%)'
-    const x1 = 0
-    const y1 = leftY
-    const x2 = bottomX
-    const y2 = 100
-    return {
-      clip: clip,
-      fold: foldFromLine(x1, y1, x2, y2, e, true),
-      shadow: shadowFromLine(x1, y1, x2, y2, e),
-    }
-  }
-
-  const rightY = 100 - e * 108
-  const bottomX = 100 - e * 108
-  const clip =
-    'polygon(0% 0%, 100% 0%, 100% ' + rightY + '%, ' + bottomX + '% 100%, 0% 100%)'
-  const x1 = 100
-  const y1 = rightY
-  const x2 = bottomX
-  const y2 = 100
-  return {
-    clip: clip,
-    fold: foldFromLine(x1, y1, x2, y2, e, false),
-    shadow: shadowFromLine(x1, y1, x2, y2, e),
-  }
-}
-
-function foldFromLine(x1, y1, x2, y2, e, mirror) {
-  const mx = (x1 + x2) / 2
-  const my = (y1 + y2) / 2
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const len = Math.sqrt(dx * dx + dy * dy)
-  const angle = (Math.atan2(dy, dx) * 180) / Math.PI + (mirror ? 180 : 0)
-  const thick = 10 + e * 28
-  return {
-    left: mx + '%',
-    top: my + '%',
-    width: Math.max(8, len) + '%',
-    angle: angle,
-    opacity: Math.min(0.95, 0.25 + e * 0.85),
-    height: thick,
-  }
-}
-
-function shadowFromLine(x1, y1, x2, y2, e) {
-  const mx = (x1 + x2) / 2
-  const my = (y1 + y2) / 2
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const len = Math.sqrt(dx * dx + dy * dy)
-  const angle = (Math.atan2(dy, dx) * 180) / Math.PI
-  return {
-    left: mx + '%',
-    top: my + '%',
-    width: Math.max(12, len * 1.05) + '%',
-    height: 18 + e * 36 + 'rpx',
-    angle: angle,
-    opacity: Math.min(0.55, 0.12 + e * 0.5),
-  }
-}
-
-function stopFlipAnim() {
-  if (flipTimer) {
-    clearInterval(flipTimer)
-    flipTimer = null
-  }
-  if (flipRaf) {
-    clearTimeout(flipRaf)
-    flipRaf = null
-  }
-}
 
 const lineHeight = computed(() => {
   for (let i = 0; i < lineHeightOptions.length; i++) {
@@ -429,7 +323,7 @@ const activeTheme = computed(() => {
   for (let i = 0; i < themes.length; i++) {
     if (themes[i].id === themeId.value) return themes[i]
   }
-  return themes[2]
+  return themes[0]
 })
 
 const readerVars = computed(() => {
@@ -444,16 +338,16 @@ const readerVars = computed(() => {
 })
 
 const shellExtraStyle = computed(() => {
-  if (booting.value || loadError.value) return null
+  if (booting.value || loadError.value) return { background: '#0c0e12' }
   return { background: activeTheme.value.bg }
 })
-
-const chapterPct = computed(() => Math.round(chapterScrollRatio.value * 100))
 
 const bookPct = computed(() => {
   const total = chapterCount.value
   if (!total) return 0
-  const v = ((chapterIndex.value - 1 + chapterScrollRatio.value) / total) * 100
+  const pc = pageCount.value
+  const pageRatio = pc > 1 ? pageIndex.value / (pc - 1) : 1
+  const v = ((chapterIndex.value - 1 + pageRatio) / total) * 100
   if (v < 0) return 0
   if (v > 100) return 100
   return Math.round(v * 10) / 10
@@ -473,6 +367,7 @@ const tocList = computed(() => {
 })
 
 onLoad((query) => {
+  syncSystemInfo()
   loadPrefs()
   const q = query || {}
   bookId.value = decodeURIComponent(q.bookId || '')
@@ -486,8 +381,18 @@ onLoad((query) => {
 })
 
 onMounted(() => {
+  syncSystemInfo()
+  // 导航高度就绪后重排一页，避免首屏估算偏差
+  if (!booting.value && !loadError.value && chapterContent.value) {
+    rebuildPages(true)
+  }
+})
+
+function syncSystemInfo() {
   const info = uni.getSystemInfoSync() || {}
   statusBarHeight.value = info.statusBarHeight || 20
+  windowWidth.value = Number(info.windowWidth) || 375
+  windowHeight.value = Number(info.windowHeight) || 667
   try {
     const menuButton = wx.getMenuButtonBoundingClientRect()
     if (menuButton && menuButton.height) {
@@ -497,12 +402,27 @@ onMounted(() => {
   } catch (e) {
     // ignore
   }
-})
+}
 
 onUnload(() => {
   clearChromeTimer()
   stopFlipAnim()
 })
+
+function emptyPageView() {
+  return {
+    text: '',
+    title: '',
+    showTitle: false,
+    showEnd: false,
+    endLabel: '',
+    foot: '',
+  }
+}
+
+function rpx2px(rpx) {
+  return (Number(rpx) * windowWidth.value) / 750
+}
 
 function goBack() {
   uni.navigateBack({
@@ -530,7 +450,7 @@ async function boot() {
     }
     const total = Number(book.chapterCount) || 0
     if (chapterIndex.value > total && total > 0) chapterIndex.value = total
-    showChapter(chapterIndex.value, false)
+    applyChapter(chapterIndex.value, 0, false)
     maybeShowTip()
   } catch (err) {
     console.error('打开书籍失败', err)
@@ -584,98 +504,306 @@ function maybeShowTip() {
     // ignore
   }
   uni.showToast({
-    title: '点左侧上章 · 点右侧下章 · 点中间菜单',
+    title: '点右侧/左滑下页 · 点左侧/右滑上页 · 点中间菜单',
     icon: 'none',
-    duration: 2800,
+    duration: 3000,
   })
 }
 
-function showChapter(index, withAnim, dir) {
+/** 估算单行文字宽度（中文≈字号，ASCII≈半宽） */
+function measureLineWidth(text, fontPx) {
+  let w = 0
+  const s = String(text || '')
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i)
+    if (code <= 0x7f) w += fontPx * 0.55
+    else w += fontPx
+  }
+  return w
+}
+
+function countWrappedLines(text, contentW, fontPx) {
+  const s = String(text || '')
+  if (!s) return 1
+  const w = measureLineWidth(s, fontPx)
+  const lines = Math.ceil(w / Math.max(1, contentW))
+  return lines > 0 ? lines : 1
+}
+
+/**
+ * 按视口高度把本章正文切成多页，每页刚好一屏，不再上下滚动。
+ */
+function paginateChapter(content, title, opts) {
+  const fontPx = rpx2px(opts.fontSizeRpx)
+  const lineH = fontPx * opts.lineHeight
+  // letter-spacing / 换行误差：内容区略收窄，行数预算留余量，避免底边被裁切
+  const contentW = Math.max(40, opts.contentWidthPx - fontPx * 0.35)
+  const fullH = Math.max(lineH * 3, opts.contentHeightPx)
+  const titleH = opts.showTitleReserve ? rpx2px(TITLE_BLOCK_RPX) : 0
+  const endH = rpx2px(END_BLOCK_RPX)
+
+  const rawLines = String(content || '').split('\n')
+  const units = []
+  for (let i = 0; i < rawLines.length; i++) {
+    units.push({
+      text: rawLines[i],
+      lines: countWrappedLines(rawLines[i], contentW, fontPx),
+    })
+  }
+  if (!units.length) units.push({ text: '', lines: 1 })
+
+  const out = []
+  let idx = 0
+  let pageNo = 0
+
+  while (idx < units.length) {
+    const isFirst = pageNo === 0
+    let budget = Math.floor(((fullH - (isFirst ? titleH : 0)) / lineH) * 0.92)
+    if (budget < 1) budget = 1
+
+    const chunk = []
+    let used = 0
+    while (idx < units.length) {
+      const u = units[idx]
+      const need = u.lines
+      if (chunk.length && used + need > budget) break
+      if (!chunk.length && need > budget) {
+        // 超长单行：硬切字符装进本页
+        const maxChars = Math.max(1, Math.floor(contentW / fontPx) * budget)
+        if (u.text.length > maxChars) {
+          chunk.push(u.text.slice(0, maxChars))
+          units[idx] = {
+            text: u.text.slice(maxChars),
+            lines: countWrappedLines(u.text.slice(maxChars), contentW, fontPx),
+          }
+          used = budget
+          break
+        }
+      }
+      chunk.push(u.text)
+      used += need
+      idx += 1
+      if (used >= budget) break
+    }
+
+    out.push({
+      text: chunk.join('\n'),
+      showTitle: isFirst,
+      showEnd: false,
+    })
+    pageNo += 1
+  }
+
+  if (!out.length) {
+    out.push({ text: '', showTitle: true, showEnd: true })
+  } else {
+    // 末页尽量塞进「本章完」；空间不够则单独一页
+    const last = out[out.length - 1]
+    const lastLines = countWrappedLines(last.text, contentW, fontPx)
+    const lastBudget = Math.floor(
+      (fullH - (last.showTitle ? titleH : 0) - endH) / lineH
+    )
+    if (lastLines <= lastBudget) {
+      last.showEnd = true
+    } else {
+      out.push({ text: '', showTitle: false, showEnd: true })
+    }
+  }
+
+  return out
+}
+
+function getContentMetrics() {
+  const navH = statusBarHeight.value + navBarHeight.value
+  const stageH = Math.max(120, windowHeight.value - navH)
+  const contentHeightPx = stageH - rpx2px(PAD_TOP_RPX) - rpx2px(PAD_BOTTOM_RPX)
+  const contentWidthPx = windowWidth.value - rpx2px(PAD_X_RPX) * 2
+  return { contentHeightPx, contentWidthPx }
+}
+
+function rebuildPages(keepRatio) {
+  const m = getContentMetrics()
+  const ratio =
+    keepRatio && pages.value.length > 1
+      ? pageIndex.value / Math.max(1, pages.value.length - 1)
+      : 0
+  const list = paginateChapter(chapterContent.value, chapterTitle.value, {
+    fontSizeRpx: fontSize.value,
+    lineHeight: lineHeight.value,
+    contentWidthPx: m.contentWidthPx,
+    contentHeightPx: m.contentHeightPx,
+    showTitleReserve: true,
+  })
+  pages.value = list
+  if (keepRatio && list.length > 1) {
+    let i = Math.round(ratio * (list.length - 1))
+    if (i < 0) i = 0
+    if (i >= list.length) i = list.length - 1
+    pageIndex.value = i
+  } else if (pageIndex.value >= list.length) {
+    pageIndex.value = Math.max(0, list.length - 1)
+  }
+}
+
+function toPageView(page, chapTitle, chapIndex, pIndex, pCount, endIsBook) {
+  return {
+    text: (page && page.text) || '',
+    title: chapTitle || '',
+    showTitle: !!(page && page.showTitle),
+    showEnd: !!(page && page.showEnd),
+    endLabel: endIsBook ? '全书完' : '本章完',
+    foot: chapIndex + ' · ' + (pIndex + 1) + '/' + pCount,
+  }
+}
+
+function applyChapter(index, targetPage, withAnim, dir) {
   const data = getCachedChapter(bookId.value, index)
   if (!data) {
     uni.showToast({ title: '章节不存在', icon: 'none' })
-    return
+    return false
   }
 
+  const nextTitle = data.title || '第' + index + '章'
+  const nextContent = data.content || ''
+  const m = getContentMetrics()
+  const nextPages = paginateChapter(nextContent, nextTitle, {
+    fontSizeRpx: fontSize.value,
+    lineHeight: lineHeight.value,
+    contentWidthPx: m.contentWidthPx,
+    contentHeightPx: m.contentHeightPx,
+    showTitleReserve: true,
+  })
+
+  let p = targetPage
+  if (p === 'last') p = nextPages.length - 1
+  p = Number(p) || 0
+  if (p < 0) p = 0
+  if (p >= nextPages.length) p = nextPages.length - 1
+
+  const endIsBook = index >= chapterCount.value
   const apply = () => {
     chapterIndex.value = Number(data.index) || index
-    chapterTitle.value = data.title || '第' + index + '章'
-    chapterContent.value = data.content || ''
+    chapterTitle.value = nextTitle
+    chapterContent.value = nextContent
+    pages.value = nextPages
+    pageIndex.value = p
     setNovelProgress(bookId.value, chapterIndex.value)
-    chapterScrollRatio.value = 0
-    scrollTop.value = scrollTop.value === 0 ? 0.01 : 0
   }
 
   if (!withAnim) {
     stopFlipAnim()
     flipActive.value = false
+    flipRun.value = false
     animating.value = false
     apply()
-    return
+    return true
   }
 
-  if (animating.value) return
+  if (animating.value) return false
 
-  const nextDir = dir === 'prev' ? 'prev' : index < chapterIndex.value ? 'prev' : 'next'
+  const nextDir = dir === 'prev' ? 'prev' : 'next'
   turnDir.value = nextDir
-  frontTitle.value = chapterTitle.value
-  frontBody.value = chapterContent.value
-  backTitle.value = data.title || '第' + index + '章'
-  backBody.value = data.content || ''
+  frontPage.value = toPageView(
+    currentPage.value,
+    chapterTitle.value,
+    chapterIndex.value,
+    pageIndex.value,
+    pageCount.value,
+    isLastChapter.value
+  )
+  backPage.value = toPageView(
+    nextPages[p],
+    nextTitle,
+    Number(data.index) || index,
+    p,
+    nextPages.length,
+    endIsBook
+  )
 
+  runFlip(apply)
+  return true
+}
+
+function turnWithinChapter(nextIndex, dir) {
+  if (animating.value) return
+  const list = pages.value
+  if (nextIndex < 0 || nextIndex >= list.length) return
+
+  turnDir.value = dir
+  frontPage.value = toPageView(
+    list[pageIndex.value],
+    chapterTitle.value,
+    chapterIndex.value,
+    pageIndex.value,
+    list.length,
+    isLastChapter.value
+  )
+  backPage.value = toPageView(
+    list[nextIndex],
+    chapterTitle.value,
+    chapterIndex.value,
+    nextIndex,
+    list.length,
+    isLastChapter.value
+  )
+
+  runFlip(() => {
+    pageIndex.value = nextIndex
+  })
+}
+
+function stopFlipAnim() {
+  if (flipTimer) {
+    clearTimeout(flipTimer)
+    flipTimer = null
+  }
+}
+
+function runFlip(applyFn) {
   animating.value = true
   flipActive.value = true
-  flipCurl.value = 0
+  flipRun.value = false
   stopFlipAnim()
 
-  const started = Date.now()
-  flipTimer = setInterval(() => {
-    const p = (Date.now() - started) / FLIP_MS
-    if (p >= 1) {
-      flipCurl.value = 1
-      stopFlipAnim()
-      apply()
+  nextTick(() => {
+    // 先落位再开 transition，避免首帧闪跳
+    flipRun.value = true
+    flipTimer = setTimeout(() => {
+      applyFn()
       flipActive.value = false
+      flipRun.value = false
       animating.value = false
-      flipCurl.value = 0
-      return
-    }
-    flipCurl.value = p
-  }, 16)
+      flipTimer = null
+    }, FLIP_MS)
+  })
 }
 
-function goPrev() {
+function goPrevPage() {
   bumpChromeTimer()
   if (animating.value) return
+  if (pageIndex.value > 0) {
+    turnWithinChapter(pageIndex.value - 1, 'prev')
+    return
+  }
   if (chapterIndex.value <= 1) {
-    uni.showToast({ title: '已是第一章', icon: 'none' })
+    uni.showToast({ title: '已是第一页', icon: 'none' })
     return
   }
-  showChapter(chapterIndex.value - 1, true, 'prev')
+  applyChapter(chapterIndex.value - 1, 'last', true, 'prev')
 }
 
-function goNext() {
+function goNextPage() {
   bumpChromeTimer()
   if (animating.value) return
-  if (chapterIndex.value >= chapterCount.value) {
-    uni.showToast({ title: '已是最后一章', icon: 'none' })
+  if (pageIndex.value < pageCount.value - 1) {
+    turnWithinChapter(pageIndex.value + 1, 'next')
     return
   }
-  showChapter(chapterIndex.value + 1, true, 'next')
-}
-
-function onScroll(e) {
-  const d = (e && e.detail) || {}
-  const top = Number(d.scrollTop) || 0
-  const h = Number(d.scrollHeight) || 0
-  const sys = uni.getSystemInfoSync() || {}
-  const winH = Number(sys.windowHeight) || 600
-  const viewH = winH * 0.78
-  const max = Math.max(1, h - viewH)
-  let r = top / max
-  if (r < 0) r = 0
-  if (r > 1) r = 1
-  chapterScrollRatio.value = r
+  if (chapterIndex.value >= chapterCount.value) {
+    uni.showToast({ title: '已是最后一页', icon: 'none' })
+    return
+  }
+  applyChapter(chapterIndex.value + 1, 0, true, 'next')
 }
 
 function onTouchStart(e) {
@@ -686,6 +814,20 @@ function onTouchStart(e) {
   touchY = t.clientY
   lastTapX = t.clientX
   touchMoved = false
+  swipeLocked = false
+}
+
+function onTouchMove(e) {
+  const list = e.touches || []
+  const t = list[0]
+  if (!t) return
+  const dx = t.clientX - touchX
+  const dy = t.clientY - touchY
+  if (Math.abs(dx) > 10 || Math.abs(dy) > 10) touchMoved = true
+  // 横向滑动占优时锁住，避免误触滚动（虽已无 scroll）
+  if (!swipeLocked && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+    swipeLocked = true
+  }
 }
 
 function onTouchEnd(e) {
@@ -695,8 +837,14 @@ function onTouchEnd(e) {
   lastTapX = t.clientX
   const dx = t.clientX - touchX
   const dy = t.clientY - touchY
-  // 仅标记是否滚动，不再用横滑切章
-  if (Math.abs(dx) > 12 || Math.abs(dy) > 12) touchMoved = true
+
+  if (settingsOpen.value || tocOpen.value || animating.value) return
+
+  if (Math.abs(dx) >= SWIPE_MIN && Math.abs(dx) > Math.abs(dy) * 1.1) {
+    touchMoved = true
+    if (dx < 0) goNextPage()
+    else goPrevPage()
+  }
 }
 
 function onBodyTap() {
@@ -704,16 +852,15 @@ function onBodyTap() {
   if (settingsOpen.value || tocOpen.value) return
   if (animating.value) return
 
-  const sys = uni.getSystemInfoSync() || {}
-  const w = Number(sys.windowWidth) || 375
+  const w = windowWidth.value || 375
   const x = lastTapX || w / 2
 
   if (x < w * EDGE_RATIO) {
-    goPrev()
+    goPrevPage()
     return
   }
   if (x > w * (1 - EDGE_RATIO)) {
-    goNext()
+    goNextPage()
     return
   }
   toggleChrome()
@@ -772,25 +919,32 @@ function closeToc() {
 function jumpChapter(index) {
   closeToc()
   if (animating.value) return
+  if (index === chapterIndex.value) {
+    pageIndex.value = 0
+    return
+  }
   const dir = index < chapterIndex.value ? 'prev' : 'next'
-  showChapter(index, true, dir)
+  applyChapter(index, 0, true, dir)
 }
 
 function shrinkFont() {
   if (fontSize.value <= FONT_MIN) return
   fontSize.value -= FONT_STEP
   savePrefs()
+  rebuildPages(true)
 }
 
 function growFont() {
   if (fontSize.value >= FONT_MAX) return
   fontSize.value += FONT_STEP
   savePrefs()
+  rebuildPages(true)
 }
 
 function setLineHeight(id) {
   lineHeightId.value = id
   savePrefs()
+  rebuildPages(true)
 }
 
 function setTheme(id) {
@@ -814,19 +968,27 @@ function setTheme(id) {
 .reader-shell {
   position: relative;
   height: 100%;
-  background: var(--reader-bg, #e8f4fc);
+  background: var(--reader-bg, #0c0e12);
   overflow: hidden;
 }
 
-.reader-scroll {
+.reader-stage {
+  position: relative;
   height: 100%;
-  box-sizing: border-box;
+  overflow: hidden;
+  touch-action: none;
 }
 
-.reader-content {
-  position: relative;
-  padding: 28rpx 40rpx 120rpx;
-  background: var(--reader-bg, #e8f4fc);
+.page-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  padding: 28rpx 40rpx 72rpx;
+  box-sizing: border-box;
+  background: var(--reader-bg, #0c0e12);
+  overflow: hidden;
 }
 
 .flip-stage {
@@ -835,21 +997,13 @@ function setTheme(id) {
   right: 0;
   top: 0;
   bottom: 0;
-  z-index: 15;
   overflow: hidden;
-  background: var(--reader-bg, #e8f4fc);
 }
 
-.flip-page {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  padding: 28rpx 40rpx 80rpx;
-  box-sizing: border-box;
-  background: var(--reader-bg, #e8f4fc);
-  overflow: hidden;
+.flip-back,
+.flip-front {
+  transition: none;
+  will-change: transform;
 }
 
 .flip-back {
@@ -857,56 +1011,88 @@ function setTheme(id) {
 }
 
 .flip-front {
-  z-index: 3;
-  box-shadow: -8rpx 0 28rpx rgba(0, 0, 0, 0.08);
+  z-index: 2;
+  box-shadow: 0 0 0 transparent;
 }
 
-.flip-sheet-shadow {
+/* 下一页：当前页左滑出，新页从右侧跟入 */
+.flip-stage.dir-next .flip-back {
+  transform: translate3d(100%, 0, 0);
+}
+
+.flip-stage.dir-next.is-run .flip-back {
+  transition: transform 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transform: translate3d(0, 0, 0);
+}
+
+.flip-stage.dir-next.is-run .flip-front {
+  transition:
+    transform 0.34s cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 0.34s ease;
+  transform: translate3d(-104%, 0, 0);
+  box-shadow: 12rpx 0 40rpx rgba(0, 0, 0, 0.28);
+}
+
+/* 上一页：当前页右滑出，新页从左侧跟入 */
+.flip-stage.dir-prev .flip-back {
+  transform: translate3d(-100%, 0, 0);
+}
+
+.flip-stage.dir-prev.is-run .flip-back {
+  transition: transform 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transform: translate3d(0, 0, 0);
+}
+
+.flip-stage.dir-prev.is-run .flip-front {
+  transition:
+    transform 0.34s cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 0.34s ease;
+  transform: translate3d(104%, 0, 0);
+  box-shadow: -12rpx 0 40rpx rgba(0, 0, 0, 0.28);
+}
+
+.edge-hint {
   position: absolute;
-  z-index: 4;
+  top: 18%;
+  bottom: 18%;
+  width: 8rpx;
+  border-radius: 999rpx;
+  opacity: 0;
   pointer-events: none;
-  border-radius: 4rpx;
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.22) 0%,
-    rgba(0, 0, 0, 0.06) 45%,
-    transparent 100%
-  );
-}
-
-.flip-fold {
-  position: absolute;
+  transition: opacity 0.22s ease;
   z-index: 5;
-  pointer-events: none;
-  border-radius: 2rpx;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.55) 0%,
-    rgba(255, 255, 255, 0.12) 35%,
-    rgba(0, 0, 0, 0.12) 62%,
-    rgba(0, 0, 0, 0.28) 100%
-  );
-  box-shadow: 0 6rpx 18rpx rgba(0, 0, 0, 0.18);
 }
 
-.theme-night .flip-front {
-  box-shadow: -8rpx 0 28rpx rgba(0, 0, 0, 0.35);
+.edge-hint.show {
+  opacity: 0.35;
 }
 
-.theme-night .flip-fold {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.2) 0%,
-    rgba(255, 255, 255, 0.05) 40%,
-    rgba(0, 0, 0, 0.35) 70%,
-    rgba(0, 0, 0, 0.55) 100%
-  );
+.edge-hint--left {
+  left: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), transparent);
+}
+
+.edge-hint--right {
+  right: 0;
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.35), transparent);
+}
+
+.theme-paper .edge-hint--left,
+.theme-mint .edge-hint--left,
+.theme-sky .edge-hint--left {
+  background: linear-gradient(90deg, rgba(15, 45, 74, 0.18), transparent);
+}
+
+.theme-paper .edge-hint--right,
+.theme-mint .edge-hint--right,
+.theme-sky .edge-hint--right {
+  background: linear-gradient(270deg, rgba(15, 45, 74, 0.18), transparent);
 }
 
 .in-chap-title {
   display: block;
   font-size: 26rpx;
-  color: var(--reader-muted, #6b8fa8);
+  color: var(--reader-muted, #7a8290);
   letter-spacing: 2rpx;
   margin-bottom: 28rpx;
   opacity: 0.9;
@@ -916,55 +1102,47 @@ function setTheme(id) {
   display: block;
   font-size: var(--reader-font, 32rpx);
   line-height: var(--reader-lh, 1.9);
-  color: var(--reader-text, #0f2d4a);
+  color: var(--reader-text, #d2d6de);
   letter-spacing: 1rpx;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .chap-end {
-  margin-top: 64rpx;
+  margin-top: 48rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20rpx;
+  gap: 16rpx;
 }
 
 .chap-end-line {
   width: 80rpx;
   height: 2rpx;
-  background: var(--reader-muted, #6b8fa8);
+  background: var(--reader-muted, #7a8290);
   opacity: 0.35;
 }
 
 .chap-end-text {
   font-size: 24rpx;
-  color: var(--reader-muted, #6b8fa8);
+  color: var(--reader-muted, #7a8290);
   letter-spacing: 4rpx;
 }
 
-.chap-end-next {
-  margin-top: 8rpx;
-  padding: 16rpx 36rpx;
-  border-radius: 999rpx;
-  background: rgba(74, 159, 232, 0.14);
+.page-foot {
+  position: absolute;
+  left: 40rpx;
+  right: 40rpx;
+  bottom: 20rpx;
+  display: flex;
+  justify-content: center;
 }
 
-.theme-night .chap-end-next {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.chap-end-next--active {
-  opacity: 0.85;
-}
-
-.chap-end-next-text {
-  font-size: 24rpx;
-  color: var(--reader-text, #0f2d4a);
-}
-
-.reader-tail {
-  height: 48rpx;
+.page-foot-text {
+  font-size: 20rpx;
+  color: var(--reader-muted, #7a8290);
+  opacity: 0.7;
+  letter-spacing: 1rpx;
 }
 
 .reader-back {
@@ -1009,8 +1187,8 @@ function setTheme(id) {
 .reader-back-arrow {
   width: 16rpx;
   height: 16rpx;
-  border-left: 3rpx solid var(--reader-text, #0f2d4a);
-  border-bottom: 3rpx solid var(--reader-text, #0f2d4a);
+  border-left: 3rpx solid var(--reader-text, #d2d6de);
+  border-bottom: 3rpx solid var(--reader-text, #d2d6de);
   transform: rotate(45deg);
   margin-left: 4rpx;
   opacity: 0.72;
@@ -1033,7 +1211,7 @@ function setTheme(id) {
 
 .theme-night .chrome-top,
 .theme-night .chrome-bottom {
-  background: rgba(28, 32, 40, 0.94);
+  background: rgba(18, 20, 26, 0.94);
 }
 
 .chrome-top {
@@ -1060,7 +1238,7 @@ function setTheme(id) {
 .chrome-book {
   display: block;
   font-size: 22rpx;
-  color: var(--reader-muted, #6b8fa8);
+  color: var(--reader-muted, #7a8290);
   margin-bottom: 6rpx;
 }
 
@@ -1068,14 +1246,14 @@ function setTheme(id) {
   display: block;
   font-size: 28rpx;
   font-weight: 600;
-  color: var(--reader-text, #0f2d4a);
+  color: var(--reader-text, #d2d6de);
   margin-bottom: 4rpx;
 }
 
 .chrome-meta {
   display: block;
   font-size: 20rpx;
-  color: var(--reader-muted, #6b8fa8);
+  color: var(--reader-muted, #7a8290);
 }
 
 .progress-track {
@@ -1136,7 +1314,7 @@ function setTheme(id) {
 .chrome-btn-text {
   font-size: 24rpx;
   font-weight: 600;
-  color: var(--reader-text, #0f2d4a);
+  color: var(--reader-text, #d2d6de);
 }
 
 .sheet-mask {
@@ -1165,7 +1343,7 @@ function setTheme(id) {
 }
 
 .theme-night .sheet {
-  background: #232833;
+  background: #1a1d24;
 }
 
 .sheet.show {
@@ -1177,7 +1355,7 @@ function setTheme(id) {
   display: block;
   font-size: 30rpx;
   font-weight: 700;
-  color: var(--reader-text, #0f2d4a);
+  color: var(--reader-text, #d2d6de);
   margin-bottom: 28rpx;
 }
 
@@ -1200,7 +1378,7 @@ function setTheme(id) {
 
 .setting-label {
   font-size: 26rpx;
-  color: var(--reader-muted, #6b8fa8);
+  color: var(--reader-muted, #7a8290);
 }
 
 .setting-ctrl {
@@ -1214,7 +1392,7 @@ function setTheme(id) {
   text-align: center;
   font-size: 28rpx;
   font-weight: 600;
-  color: var(--reader-text, #0f2d4a);
+  color: var(--reader-text, #d2d6de);
 }
 
 .step-btn {
@@ -1238,7 +1416,7 @@ function setTheme(id) {
 .step-btn-text {
   font-size: 26rpx;
   font-weight: 700;
-  color: var(--reader-text, #0f2d4a);
+  color: var(--reader-text, #d2d6de);
 }
 
 .seg {
@@ -1270,7 +1448,7 @@ function setTheme(id) {
 
 .seg-text {
   font-size: 24rpx;
-  color: var(--reader-text, #0f2d4a);
+  color: var(--reader-text, #d2d6de);
 }
 
 .theme-row {
@@ -1337,14 +1515,14 @@ function setTheme(id) {
   width: 56rpx;
   flex-shrink: 0;
   font-size: 22rpx;
-  color: var(--reader-muted, #6b8fa8);
+  color: var(--reader-muted, #7a8290);
   padding-top: 4rpx;
 }
 
 .toc-name {
   flex: 1;
   font-size: 28rpx;
-  color: var(--reader-text, #0f2d4a);
+  color: var(--reader-text, #d2d6de);
   line-height: 1.4;
 }
 

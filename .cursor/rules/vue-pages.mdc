@@ -9,8 +9,36 @@ alwaysApply: false
 ## 单文件结构
 
 - 块顺序固定为：**`<template>` → `<script setup>` → `<style>`**
-- `ref`、`computed`、`onLoad`、`onShow` 等由 `unplugin-auto-import` 自动引入，页面内无需 `import`
+- `ref`、`computed`、`onLoad`、`onMounted`、`onShow` 等由 `unplugin-auto-import` 自动引入，页面内无需 `import`
 - 业务 API（如 `@/api/notebook`）仍需手动 `import`
+
+## 页面数据加载：禁止用 onShow 拉主数据
+
+切后台再回来会触发 `onShow`，若在这里 `loadXxx()` 并覆盖表单/列表，用户未保存的编辑会被清空，体验很差。
+
+```javascript
+// ❌ 禁止：onShow 拉取并覆盖页面主数据
+onShow(() => {
+  loadPlan()
+  loadHistory()
+})
+
+// ✅ 正确：首次进入用 onMounted / onLoad
+onMounted(() => {
+  loadPlan()
+  loadHistory()
+})
+
+// ✅ 有路由参数时在 onLoad 里取参并加载
+onLoad((query) => {
+  if (query && query.date) date.value = query.date
+  loadDay()
+})
+```
+
+- **首次加载**（列表、详情、表单回填）：用 `onMounted` 或 `onLoad`，不要用 `onShow`
+- **`onShow` 仅允许**：从子页返回后刷新「非编辑态」的轻量展示（如阅读进度角标），且**不得**覆盖用户正在编辑的内容
+- 不要在 `onShow` 里做「清空再重填」类逻辑
 
 ## script setup
 

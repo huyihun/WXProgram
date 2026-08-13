@@ -12,7 +12,7 @@
         <text class="list-count">{{ list.length }} 笔</text>
       </view>
 
-      <view v-if="loading" class="status-tip">加载中...</view>
+      <PageLoading v-if="loading" />
       <view v-else-if="list.length === 0" class="status-tip">这一天没有支出</view>
       <view v-else class="expense-list">
         <view v-for="item in list" :key="item._id" class="expense-item">
@@ -46,9 +46,6 @@ const dayTotal = computed(() => {
 
 onLoad((query) => {
   if (query && query.date) date.value = query.date
-})
-
-onShow(() => {
   loadDay()
 })
 

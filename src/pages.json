@@ -11,19 +11,27 @@
       "style": {}
     },
     {
-      "path": "pages/notebook/todo/index",
-      "style": {}
-    },
-    {
       "path": "pages/notebook/plan/index",
       "style": {}
     },
     {
-      "path": "pages/notebook/diary/index",
+      "path": "pages/notebook/casual/index",
       "style": {}
     },
     {
-      "path": "pages/notebook/casual/index",
+      "path": "pages/notebook/serious/index",
+      "style": {}
+    },
+    {
+      "path": "pages/diet/index",
+      "style": {}
+    },
+    {
+      "path": "pages/hushen/index",
+      "style": {}
+    },
+    {
+      "path": "pages/zhuanggong/index",
       "style": {}
     },
     {
@@ -77,19 +85,6 @@
       }
     }
   ],
-  "subPackages": [
-    {
-      "root": "pages/game",
-      "pages": [
-        {
-          "path": "lifeRestart/index",
-          "style": {
-            "backgroundColor": "#0f1319"
-          }
-        }
-      ]
-    }
-  ],
   "globalStyle": {
     "navigationStyle": "custom",
     "navigationBarTextStyle": "black",
@@ -100,7 +95,8 @@
     "autoscan": true,
     "custom": {
       "^CustomNav$": "@/components/CustomNav.vue",
-      "^PageRoot$": "@/components/PageRoot.vue"
+      "^PageRoot$": "@/components/PageRoot.vue",
+      "^PageLoading$": "@/components/PageLoading.vue"
     }
   }
 }

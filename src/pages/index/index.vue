@@ -5,11 +5,11 @@
         <view class="content content--vip" :style="contentPadStyle">
           <!-- Hero：问候轻、语录主 -->
           <view class="hero fade-in hero--vip">
-            <text class="greeting">{{ greeting }}</text>
+            <!-- <text class="greeting">{{ greeting }}</text> -->
             <text id="homeHeroDesc" class="hero-desc">{{ healingQuote }}</text>
           </view>
 
-          <!-- 分类宫格：记录 / 游戏 / 休闲 -->
+          <!-- 分类宫格：记录 / 休闲 -->
           <view v-for="(section, sIndex) in entrySections" :key="section.id" class="entry-section">
             <view class="section-head">
               <view class="section-accent" />
@@ -24,7 +24,7 @@
                 v-for="(item, index) in section.items"
                 :key="item.id"
                 class="entry-card"
-                :class="'entry-delay-' + (sIndex * 3 + index)"
+                :class="'entry-delay-' + (section.id === 'personal' ? index : sIndex * 3 + index)"
                 hover-class="entry-card--active"
                 @tap="handleEntryTap(item)"
               >
@@ -57,9 +57,21 @@
                       <view class="icon-novel-page" />
                     </view>
                   </view>
-                  <view v-else-if="item.id === 'lifeRestart'" class="icon-life">
-                    <view class="icon-life-ring" />
-                    <view class="icon-life-arrow" />
+                  <view v-else-if="item.id === 'serious'" class="icon-serious">
+                    <view class="icon-serious-bar" />
+                    <view class="icon-serious-dot" />
+                  </view>
+                  <view v-else-if="item.id === 'diet'" class="icon-diet">
+                    <view class="icon-diet-plate" />
+                    <view class="icon-diet-leaf" />
+                  </view>
+                  <view v-else-if="item.id === 'hushen'" class="icon-hushen">
+                    <view class="icon-hushen-seal" />
+                    <view class="icon-hushen-mark" />
+                  </view>
+                  <view v-else-if="item.id === 'zhuanggong'" class="icon-zhuanggong">
+                    <view class="icon-zhuanggong-dot" />
+                    <view class="icon-zhuanggong-line" />
                   </view>
                 </view>
                 <text class="entry-name">{{ item.name }}</text>
@@ -124,118 +136,119 @@
 import { MOOD_OPTIONS, getMoodByDate, getToday } from '@/api/notebook'
 import { loadHomeWeather, COMMON_CITIES } from '@/api/weather'
 import { getWeatherFxLocalPath } from '@/utils/weatherFx'
+import { loadOwnerFlag, isOwnerSync } from '@/utils/owner'
 import MoodPicker from '@/components/MoodPicker.vue'
 import HomeMusicBar from '@/components/HomeMusicBar.vue'
 
 /** 本地治愈语录，每次回到首页随机展示一句 */
 const HEALING_QUOTES = [
-  '你不必完美，温柔地对待自己就很好。',
   '慢慢来，一切都来得及。',
-  '允许自己休息，休息也是进步的一部分。',
-  '今天的你，已经足够好了。',
-  '即使路漫长，也有微光照亮脚下。',
-  '把焦虑轻轻放下，先做一个深呼吸。',
-  '你值得被爱，也值得好好爱自己。',
-  '风雨之后，总会有清澈的天空。',
-  '不必急着抵达，感受沿途本身也很好。',
-  '平静不是没有波澜，是心能安住当下。',
-  '一点点光亮，也能驱散很长的夜。',
-  '难过时也请记得：情绪会过去，你还在。',
-  '把生活过成自己喜欢的样子，就是胜利。',
-  '柔软不是软弱，是勇气的另一种形式。',
-  '愿你被世界温柔以待，也先温柔以自己。',
-  '停下来看看花，日子也会亮一点。',
-  '你走过的每一步，都算数。',
-  '今天先好好吃饭、好好睡觉，明天再说。',
-  '累了就歇一歇，山不会因为你停下而消失。',
-  '所有花都会开，只是时机不同。',
-  '不必和别人比速度，你有自己的节奏。',
-  '有些日子平淡，平淡也是一种安稳。',
-  '你已经很努力了，请别再苛责自己。',
-  '太阳每天都会升起，希望也是。',
-  '把不安说出来，心会轻一点。',
-  '孤独时也要记得，你并不孤单。',
-  '接受不完美，才能真正开始幸福。',
-  '此刻的挣扎，将来都会变成力量。',
-  '对自己好一点，这不是任性。',
-  '时间会悄悄带走许多烦恼。',
-  '你配得上所有温柔的事物。',
-  '深吸一口气，把今天交给慢慢来。',
-  '心若安了，处处都是好光景。',
-  '不必把所有事都扛在肩上。',
-  '有人懂你，就很好；还没有，也可以先懂自己。',
-  '夜晚再长，也等得到天亮。',
-  '小小进步，也值得为自己鼓掌。',
-  '允许情绪来临，也允许它离开。',
-  '世界很大，你只要把自己照顾好。',
-  '今天难过没关系，明天还可以重新开始。',
-  '温柔是一种选择，也请选给自己。',
-  '你不必急着让所有人都满意。',
-  '低谷不是终点，只是一段路过。',
-  '把心放软一点，日子会更舒服。',
-  '一杯水、一次散步，也是疗愈。',
-  '未来尚未写定，你可以慢慢改写。',
-  '不必害怕变慢，变慢有时是为了走得更稳。',
-  '你已经走过了那么多难关，再难也能过。',
-  '生活偶尔吵闹，也请给内心留一片静。',
-  '愿意尝试，就已经很勇敢。',
-  '不必时刻坚强，软弱也被允许。',
-  '把「应该」换成「可以」，轻松会多一点。',
-  '阳光也会路过阴天，请再等等。',
-  '你的感受真实又重要。',
-  '不要用别人的尺子量自己。',
-  '静下心来，会听见自己真正想要什么。',
-  '每一天都是新的开始，哪怕只前进一小步。',
-  '心里有光，就不怕路远。',
-  '好好吃饭，是认真生活的第一步。',
-  '失望之后，仍可以重新期待。',
-  '不必急着回答世界，先听听自己。',
-  '做自己，比做众人眼中的「更好」更重要。',
-  '眼泪落下，心就会空出一点位子装温暖。',
-  '幸运也许迟到，但努力不会白费。',
-  '把今天过好，就是对明天最大的准备。',
-  '你值得被耐心对待。',
-  '喧嚣之外，总有一处安静属于你。',
-  '不必追赶潮流，找到自己的舒服就好。',
-  '困难会过去，而你学会的勇气会留下。',
-  '愿你的善良，被温柔接住。',
-  '发呆也是一种休息，别总责备自己懒。',
-  '日子细碎，幸福往往藏在细节里。',
-  '你可以慢热，也可以慢慢开花。',
-  '与其对着昨天后悔，不如轻轻拥抱今天。',
-  '被看见很重要，先被自己看见。',
-  '把恐惧摆到一边，先去做能做的那一步。',
-  '有光的地方不止远方，也可能就在此刻。',
-  '请相信：你正在成为更好的自己。',
-  '不必解释太多，懂的人自然懂。',
-  '心里空空也没关系，慢慢装进喜欢的事。',
-  '原谅过去的自己，然后继续往前走。',
-  '你不是负担，你是值得被珍惜的存在。',
-  '晚安不是结束，是给明天蓄一点力气。',
-  '偶尔迷茫，说明你正认真面对生活。',
-  '把焦虑拆成小事，一件一件完成就好。',
-  '春天总会来，哪怕你暂时看不见。',
-  '尊重自己的边界，也是一种自我爱护。',
-  '不必样样出色，真心就够珍贵。',
-  '你尽了力，结果就不必过于苛求。',
-  '愿意停留当下，就能感受到更多美好。',
-  '雨停之后，空气也会更清新。',
-  '别人的节奏是别人的，请走自己的路。',
-  '把微笑留给生活，也留给镜子里的自己。',
-  '你可以重新开始，一万次都可以。',
-  '温柔地说话，先对自己温柔地说。',
-  '夜空有星，说明黑暗里也藏着亮。',
-  '哪怕小小幸福，也请认真收下。',
-  '你不必急着长大，好好经历就很好。',
-  '今天辛苦了，给你一个虚拟的拥抱。',
-  '把希望留着，它会在某个清晨回应你。',
+  // '你不必完美，温柔地对待自己就很好。',
+  // '允许自己休息，休息也是进步的一部分。',
+  // '今天的你，已经足够好了。',
+  // '即使路漫长，也有微光照亮脚下。',
+  // '把焦虑轻轻放下，先做一个深呼吸。',
+  // '你值得被爱，也值得好好爱自己。',
+  // '风雨之后，总会有清澈的天空。',
+  // '不必急着抵达，感受沿途本身也很好。',
+  // '平静不是没有波澜，是心能安住当下。',
+  // '一点点光亮，也能驱散很长的夜。',
+  // '难过时也请记得：情绪会过去，你还在。',
+  // '把生活过成自己喜欢的样子，就是胜利。',
+  // '柔软不是软弱，是勇气的另一种形式。',
+  // '愿你被世界温柔以待，也先温柔以自己。',
+  // '停下来看看花，日子也会亮一点。',
+  // '你走过的每一步，都算数。',
+  // '今天先好好吃饭、好好睡觉，明天再说。',
+  // '累了就歇一歇，山不会因为你停下而消失。',
+  // '所有花都会开，只是时机不同。',
+  // '不必和别人比速度，你有自己的节奏。',
+  // '有些日子平淡，平淡也是一种安稳。',
+  // '你已经很努力了，请别再苛责自己。',
+  // '太阳每天都会升起，希望也是。',
+  // '把不安说出来，心会轻一点。',
+  // '孤独时也要记得，你并不孤单。',
+  // '接受不完美，才能真正开始幸福。',
+  // '此刻的挣扎，将来都会变成力量。',
+  // '对自己好一点，这不是任性。',
+  // '时间会悄悄带走许多烦恼。',
+  // '你配得上所有温柔的事物。',
+  // '深吸一口气，把今天交给慢慢来。',
+  // '心若安了，处处都是好光景。',
+  // '不必把所有事都扛在肩上。',
+  // '有人懂你，就很好；还没有，也可以先懂自己。',
+  // '夜晚再长，也等得到天亮。',
+  // '小小进步，也值得为自己鼓掌。',
+  // '允许情绪来临，也允许它离开。',
+  // '世界很大，你只要把自己照顾好。',
+  // '今天难过没关系，明天还可以重新开始。',
+  // '温柔是一种选择，也请选给自己。',
+  // '你不必急着让所有人都满意。',
+  // '低谷不是终点，只是一段路过。',
+  // '把心放软一点，日子会更舒服。',
+  // '一杯水、一次散步，也是疗愈。',
+  // '未来尚未写定，你可以慢慢改写。',
+  // '不必害怕变慢，变慢有时是为了走得更稳。',
+  // '你已经走过了那么多难关，再难也能过。',
+  // '生活偶尔吵闹，也请给内心留一片静。',
+  // '愿意尝试，就已经很勇敢。',
+  // '不必时刻坚强，软弱也被允许。',
+  // '把「应该」换成「可以」，轻松会多一点。',
+  // '阳光也会路过阴天，请再等等。',
+  // '你的感受真实又重要。',
+  // '不要用别人的尺子量自己。',
+  // '静下心来，会听见自己真正想要什么。',
+  // '每一天都是新的开始，哪怕只前进一小步。',
+  // '心里有光，就不怕路远。',
+  // '好好吃饭，是认真生活的第一步。',
+  // '失望之后，仍可以重新期待。',
+  // '不必急着回答世界，先听听自己。',
+  // '做自己，比做众人眼中的「更好」更重要。',
+  // '眼泪落下，心就会空出一点位子装温暖。',
+  // '幸运也许迟到，但努力不会白费。',
+  // '把今天过好，就是对明天最大的准备。',
+  // '你值得被耐心对待。',
+  // '喧嚣之外，总有一处安静属于你。',
+  // '不必追赶潮流，找到自己的舒服就好。',
+  // '困难会过去，而你学会的勇气会留下。',
+  // '愿你的善良，被温柔接住。',
+  // '发呆也是一种休息，别总责备自己懒。',
+  // '日子细碎，幸福往往藏在细节里。',
+  // '你可以慢热，也可以慢慢开花。',
+  // '与其对着昨天后悔，不如轻轻拥抱今天。',
+  // '被看见很重要，先被自己看见。',
+  // '把恐惧摆到一边，先去做能做的那一步。',
+  // '有光的地方不止远方，也可能就在此刻。',
+  // '请相信：你正在成为更好的自己。',
+  // '不必解释太多，懂的人自然懂。',
+  // '心里空空也没关系，慢慢装进喜欢的事。',
+  // '原谅过去的自己，然后继续往前走。',
+  // '你不是负担，你是值得被珍惜的存在。',
+  // '晚安不是结束，是给明天蓄一点力气。',
+  // '偶尔迷茫，说明你正认真面对生活。',
+  // '把焦虑拆成小事，一件一件完成就好。',
+  // '春天总会来，哪怕你暂时看不见。',
+  // '尊重自己的边界，也是一种自我爱护。',
+  // '不必样样出色，真心就够珍贵。',
+  // '你尽了力，结果就不必过于苛求。',
+  // '愿意停留当下，就能感受到更多美好。',
+  // '雨停之后，空气也会更清新。',
+  // '别人的节奏是别人的，请走自己的路。',
+  // '把微笑留给生活，也留给镜子里的自己。',
+  // '你可以重新开始，一万次都可以。',
+  // '温柔地说话，先对自己温柔地说。',
+  // '夜空有星，说明黑暗里也藏着亮。',
+  // '哪怕小小幸福，也请认真收下。',
+  // '你不必急着长大，好好经历就很好。',
+  // '今天辛苦了，给你一个虚拟的拥抱。',
+  // '把希望留着，它会在某个清晨回应你。',
 ]
 
 const entries = ref([
   {
     id: 'notebook',
     name: '记事本',
-    desc: '记录灵感与待办',
+    desc: '记录计划与感受',
     path: '/pages/notebook/index',
   },
   {
@@ -250,12 +263,6 @@ const entries = ref([
     desc: '必需品库存与剩余量',
     path: '/pages/supplies/index',
   },
-  {
-    id: 'lifeRestart',
-    name: '人生重开',
-    desc: '如果人生可以重来',
-    path: '/pages/game/lifeRestart/index',
-  },
 ])
 
 const novelEntry = {
@@ -263,6 +270,34 @@ const novelEntry = {
   name: '小说',
   desc: '东野圭吾作品集',
   path: '/pages/novel/index',
+}
+
+const seriousEntry = {
+  id: 'serious',
+  name: 'Serious',
+  desc: '主人专属认真区',
+  path: '/pages/notebook/serious/index',
+}
+
+const dietEntry = {
+  id: 'diet',
+  name: '减肥',
+  desc: '饮食运动打卡',
+  path: '/pages/diet/index',
+}
+
+const hushenEntry = {
+  id: 'hushen',
+  name: '胡神',
+  desc: '胡神模式',
+  path: '/pages/hushen/index',
+}
+
+const zhuanggongEntry = {
+  id: 'zhuanggong',
+  name: '专攻',
+  desc: '只做一件事',
+  path: '/pages/zhuanggong/index',
 }
 
 const moodOpen = ref(false)
@@ -275,6 +310,7 @@ const weather = ref(null)
 const weatherBusy = ref(false)
 const weatherTextPhase = ref('') // '' | 'out' | 'in'
 const weatherFxSrc = ref('')
+const showPersonal = ref(isOwnerSync())
 let weatherFxToken = 0
 
 const entrySections = computed(() => {
@@ -283,24 +319,14 @@ const entrySections = computed(() => {
   for (let i = 0; i < list.length; i++) {
     byId[list[i].id] = list[i]
   }
-  const recordItems = [
-    byId.notebook,
-    byId.ledger,
-    byId.supplies,
-  ].filter(Boolean)
+  const recordItems = [byId.notebook, byId.ledger, byId.supplies].filter(Boolean)
 
-  return [
+  const sections = [
     {
       id: 'record',
       title: '记录',
       sub: 'RECORD',
       items: recordItems,
-    },
-    {
-      id: 'game',
-      title: '游戏',
-      sub: 'GAME',
-      items: [byId.lifeRestart].filter(Boolean),
     },
     {
       id: 'leisure',
@@ -309,6 +335,17 @@ const entrySections = computed(() => {
       items: [novelEntry],
     },
   ]
+
+  if (showPersonal.value) {
+    sections.push({
+      id: 'personal',
+      title: '个人',
+      sub: 'PERSONAL',
+      items: [seriousEntry, dietEntry, hushenEntry, zhuanggongEntry],
+    })
+  }
+
+  return sections
 })
 
 const weatherTextClass = computed(() => {
@@ -357,20 +394,17 @@ const todayText = computed(() => {
   return date.getMonth() + 1 + '月' + date.getDate() + '日 · 星期' + weekDays[date.getDay()]
 })
 
-onMounted(() => {
+onMounted(async () => {
   layoutTopEntries()
   pickHealingQuote()
   loadMoodEntry()
   refreshWeather()
+  await loadOwnerFlag()
+  showPersonal.value = isOwnerSync()
 })
 
 onUnmounted(() => {
   clearWeatherFx()
-})
-
-onShow(() => {
-  loadMoodEntry()
-  if (!weather.value) refreshWeather()
 })
 
 watch(weatherIconKind, () => {
@@ -1213,43 +1247,128 @@ function handleEntryTap(item) {
   top: 0;
   bottom: 0;
   width: 10rpx;
-  background: $color-primary-dark;
-  opacity: 0.55;
+  background: rgba(74, 159, 232, 0.35);
 }
 
 .icon-novel-page {
   position: absolute;
   left: 14rpx;
-  right: 8rpx;
   top: 10rpx;
+  right: 8rpx;
   bottom: 10rpx;
   border-radius: 2rpx;
-  background: linear-gradient(180deg, rgba(74, 159, 232, 0.2) 0%, rgba(74, 159, 232, 0.08) 100%);
+  background: rgba(74, 159, 232, 0.12);
 }
 
-.icon-life {
+/* Serious：感叹号 */
+.icon-serious {
+  position: relative;
+  width: 40rpx;
+  height: 44rpx;
+}
+
+.icon-serious-bar {
+  position: absolute;
+  left: 17rpx;
+  top: 4rpx;
+  width: 6rpx;
+  height: 22rpx;
+  border-radius: 3rpx;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.icon-serious-dot {
+  position: absolute;
+  left: 17rpx;
+  bottom: 4rpx;
+  width: 6rpx;
+  height: 6rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+/* 减肥：盘子 + 叶 */
+.icon-diet {
   position: relative;
   width: 44rpx;
   height: 44rpx;
 }
 
-.icon-life-ring {
+.icon-diet-plate {
   position: absolute;
-  inset: 4rpx;
+  left: 4rpx;
+  top: 10rpx;
+  width: 36rpx;
+  height: 26rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.95);
   border-radius: 50%;
-  border: 4rpx solid $color-primary;
-  border-top-color: transparent;
+  box-sizing: border-box;
 }
 
-.icon-life-arrow {
+.icon-diet-leaf {
   position: absolute;
+  right: 2rpx;
   top: 2rpx;
-  right: 8rpx;
-  width: 0;
-  height: 0;
-  border-left: 8rpx solid transparent;
-  border-right: 8rpx solid transparent;
-  border-bottom: 12rpx solid $color-primary;
+  width: 14rpx;
+  height: 18rpx;
+  border-radius: 0 12rpx 2rpx 12rpx;
+  background: rgba(255, 255, 255, 0.9);
+  transform: rotate(28deg);
+}
+
+/* 胡神：印信 */
+.icon-hushen {
+  position: relative;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.icon-hushen-seal {
+  position: absolute;
+  left: 4rpx;
+  top: 4rpx;
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  border: 3rpx solid rgba(255, 255, 255, 0.95);
+  box-sizing: border-box;
+}
+
+.icon-hushen-mark {
+  position: absolute;
+  left: 18rpx;
+  top: 12rpx;
+  width: 8rpx;
+  height: 20rpx;
+  border-radius: 3rpx;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+/* 专攻：一点一线 */
+.icon-zhuanggong {
+  position: relative;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.icon-zhuanggong-dot {
+  position: absolute;
+  left: 18rpx;
+  top: 6rpx;
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.icon-zhuanggong-line {
+  position: absolute;
+  left: 20rpx;
+  top: 18rpx;
+  width: 4rpx;
+  height: 20rpx;
+  border-radius: 2rpx;
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .entry-name {

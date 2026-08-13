@@ -1,20 +1,28 @@
 /**
- * 音乐偏好云同步（置顶 + 已删列表）
+ * 音乐偏好云同步（置顶 + 已删列表 + 默认歌单）
  *
  * 使用前请在云开发控制台创建集合并设置「仅创建者可读写」：
  * - music_prefs
  *
  * 云文档字段：
- * - pinned: { [mode]: string[] }
+ * - pinned: { [mode]: string[] }  mode 见 musicModes.VALID_MUSIC_MODES
  * - removed: string[]  已删除的 fileID（清缓存后仍生效）
+ * - defaultMode: string  启动时默认歌单 mode
  */
+import { VALID_MUSIC_MODES, normalizeMusicMode } from '@/utils/musicModes'
 
 const COLLECTION = 'music_prefs'
 const LOCAL_KEY = 'music_prefs_v1'
 const LOCAL_REMOVED_KEY = 'music_removed_file_ids'
+const FALLBACK_DEFAULT_MODE = 'super_player'
+const VALID_MODES = VALID_MUSIC_MODES
 
 let state = null
 let loading = null
+
+function normalizeMode(mode) {
+  return normalizeMusicMode(mode) || FALLBACK_DEFAULT_MODE
+}
 
 function readLocalRemoved() {
   try {
@@ -41,9 +49,8 @@ function readLocalPinned() {
     // ignore
   }
   const pinned = {}
-  const modes = ['default', 'vip', 'super', 'jx']
-  for (let i = 0; i < modes.length; i++) {
-    const mode = modes[i]
+  for (let i = 0; i < VALID_MODES.length; i++) {
+    const mode = VALID_MODES[i]
     try {
       const list = uni.getStorageSync('music_pinned_' + mode) || []
       if (list.length) pinned[mode] = list.slice()
@@ -54,9 +61,22 @@ function readLocalPinned() {
   return pinned
 }
 
-function writeLocalPinned(pinned) {
+function readLocalDefaultMode() {
   try {
-    uni.setStorageSync(LOCAL_KEY, { pinned: pinned || {} })
+    const raw = uni.getStorageSync(LOCAL_KEY)
+    if (raw && raw.defaultMode) return normalizeMode(raw.defaultMode)
+  } catch (e) {
+    // ignore
+  }
+  return FALLBACK_DEFAULT_MODE
+}
+
+function writeLocalPrefs(pinned, defaultMode) {
+  try {
+    uni.setStorageSync(LOCAL_KEY, {
+      pinned: pinned || {},
+      defaultMode: normalizeMode(defaultMode),
+    })
   } catch (e) {
     // ignore
   }
@@ -94,26 +114,37 @@ function mergeIdList(a, b) {
   return out
 }
 
-/** 内存中的偏好；未加载时回落本地 */
-export function getMusicPrefsState() {
-  if (state) return state
+function buildState(removed, pinned, defaultMode) {
   return {
-    removed: readLocalRemoved(),
-    pinned: readLocalPinned(),
+    removed: removed || [],
+    pinned: clonePinned(pinned),
+    defaultMode: normalizeMode(defaultMode),
   }
 }
 
-/** 从云库拉取置顶 + 已删；与本地合并 */
+/** 内存中的偏好；未加载时回落本地 */
+export function getMusicPrefsState() {
+  if (state) return state
+  return buildState(readLocalRemoved(), readLocalPinned(), readLocalDefaultMode())
+}
+
+/** 当前默认歌单 mode（未设置时回落原生母带） */
+export function getDefaultMusicMode() {
+  return getMusicPrefsState().defaultMode || FALLBACK_DEFAULT_MODE
+}
+
+/** 从云库拉取偏好；与本地合并 */
 export async function ensureMusicPrefs() {
   if (state) return state
   if (loading) return loading
 
   loading = (async () => {
     const localPinned = readLocalPinned()
+    const localDefaultMode = readLocalDefaultMode()
 
     try {
       if (!wx.cloud) {
-        state = { removed: readLocalRemoved(), pinned: localPinned }
+        state = buildState(readLocalRemoved(), localPinned, localDefaultMode)
         return state
       }
       const res = await getDb().collection(COLLECTION).limit(1).get()
@@ -121,23 +152,21 @@ export async function ensureMusicPrefs() {
       // 异步结束后再读本地，避免期间删除被旧快照盖掉
       const localRemoved = readLocalRemoved()
       if (row) {
-        state = {
-          removed: mergeIdList(row.removed, localRemoved),
-          pinned: row.pinned ? clonePinned(row.pinned) : localPinned,
-        }
+        state = buildState(
+          mergeIdList(row.removed, localRemoved),
+          row.pinned ? clonePinned(row.pinned) : localPinned,
+          row.defaultMode || localDefaultMode
+        )
         writeLocalRemoved(state.removed)
-        writeLocalPinned(state.pinned)
+        writeLocalPrefs(state.pinned, state.defaultMode)
         return state
       }
 
-      state = {
-        removed: localRemoved,
-        pinned: clonePinned(localPinned),
-      }
+      state = buildState(localRemoved, localPinned, localDefaultMode)
       return state
     } catch (err) {
       console.warn('[musicPrefs] 云读取失败，使用本地', err)
-      state = { removed: readLocalRemoved(), pinned: localPinned }
+      state = buildState(readLocalRemoved(), localPinned, localDefaultMode)
       return state
     } finally {
       loading = null
@@ -148,17 +177,14 @@ export async function ensureMusicPrefs() {
 }
 
 /**
- * 同步 pinned + removed 到云库（本地先写）
+ * 同步 pinned + removed + defaultMode 到云库（本地先写）
  * 嵌套对象/数组必须用 _.set 整段替换
  */
 export async function saveMusicPrefs() {
   ensureLocalMusicPrefs()
-  state = {
-    removed: (state.removed || []).slice(),
-    pinned: clonePinned(state.pinned),
-  }
+  state = buildState(state.removed, state.pinned, state.defaultMode)
   writeLocalRemoved(state.removed)
-  writeLocalPinned(state.pinned)
+  writeLocalPrefs(state.pinned, state.defaultMode)
 
   if (!wx.cloud) return
 
@@ -175,6 +201,7 @@ export async function saveMusicPrefs() {
         data: {
           pinned: state.pinned,
           removed: state.removed,
+          defaultMode: state.defaultMode,
           updatedAt: now,
         },
       })
@@ -184,6 +211,7 @@ export async function saveMusicPrefs() {
       data: {
         pinned: _.set(state.pinned),
         removed: _.set(state.removed),
+        defaultMode: state.defaultMode,
         updatedAt: now,
       },
     })
@@ -197,13 +225,18 @@ export async function saveMusicPrefs() {
   }
 }
 
+/** 设为启动默认歌单，并同步云端 */
+export async function setDefaultMusicMode(mode) {
+  await ensureMusicPrefs()
+  state.defaultMode = normalizeMode(mode)
+  await saveMusicPrefs()
+  return state.defaultMode
+}
+
 /** 确保内存 state 已初始化（避免改到临时对象，删除不生效） */
 export function ensureLocalMusicPrefs() {
   if (state) return state
-  state = {
-    removed: readLocalRemoved(),
-    pinned: readLocalPinned(),
-  }
+  state = buildState(readLocalRemoved(), readLocalPinned(), readLocalDefaultMode())
   return state
 }
 
@@ -211,5 +244,5 @@ export function ensureLocalMusicPrefs() {
 export function saveRemovedLocalOnly() {
   ensureLocalMusicPrefs()
   writeLocalRemoved(state.removed || [])
-  writeLocalPinned(state.pinned || {})
+  writeLocalPrefs(state.pinned || {}, state.defaultMode)
 }

@@ -6,7 +6,7 @@
         <text class="summary-total">¥{{ formatAmount(yearTotal) }}</text>
       </view>
 
-      <view v-if="loading" class="status-tip">加载中...</view>
+      <PageLoading v-if="loading" />
       <view v-else-if="monthRows.length === 0" class="status-tip">还没有支出</view>
       <view v-else class="month-list">
         <view
@@ -32,13 +32,14 @@
 
 <script setup>
 import { getToday, getExpensesInRange } from '@/api/ledger'
+import { resolveSettlementDate, getMonthBillingPeriod } from '@/utils/billingPeriod'
 
 const year = new Date().getFullYear()
 const loading = ref(false)
 const yearTotal = ref(0)
 const monthRows = ref([])
 
-onShow(() => {
+onMounted(() => {
   loadYear()
 })
 
@@ -51,23 +52,49 @@ function goMonth(month) {
   uni.navigateTo({ url: `/pages/ledger/month?y=${year}&m=${month}` })
 }
 
+/** 已开始的最晚账期月份：未到本月结算日则仍算上月 */
+function resolveMaxMonth(today) {
+  const parts = today.split('-')
+  const todayYear = Number(parts[0])
+  const todayMonth = Number(parts[1])
+  if (todayYear > year) return 12
+  if (todayYear < year) return 0
+  const thisSettle = resolveSettlementDate(year, todayMonth)
+  if (today >= thisSettle) return todayMonth
+  return todayMonth - 1
+}
+
 async function loadYear() {
   loading.value = true
   const today = getToday()
-  const todayParts = today.split('-')
-  const todayYear = Number(todayParts[0])
-  const todayMonth = Number(todayParts[1])
-  const maxMonth = todayYear > year ? 12 : todayYear < year ? 0 : todayMonth
+  const maxMonth = resolveMaxMonth(today)
+
+  if (maxMonth < 1) {
+    yearTotal.value = 0
+    monthRows.value = []
+    loading.value = false
+    return
+  }
 
   try {
-    const rows = await getExpensesInRange(`${year}-01-01`, `${year + 1}-01-01`)
+    const periods = []
+    for (let m = 1; m <= maxMonth; m++) {
+      periods.push(getMonthBillingPeriod(year, m))
+    }
+    const rows = await getExpensesInRange(periods[0].start, periods[maxMonth - 1].end)
     const map = {}
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]
-      if (row.date > today) continue
-      const ym = String(row.date || '').slice(0, 7)
-      const m = Number(ym.split('-')[1])
-      if (!m || m > maxMonth) continue
+      const date = row.date
+      if (date > today) continue
+      let m = 0
+      for (let j = 0; j < periods.length; j++) {
+        if (date >= periods[j].start && date < periods[j].end) {
+          m = j + 1
+          break
+        }
+      }
+      if (!m) continue
       if (!map[m]) map[m] = { total: 0, count: 0 }
       map[m].total += Number(row.amount) || 0
       map[m].count += 1

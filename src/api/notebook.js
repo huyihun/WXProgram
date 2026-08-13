@@ -3,9 +3,7 @@
  *
  * 使用前请在云开发控制台创建以下集合并设置「仅创建者可读写」：
  * - notebook_plans
- * - notebook_diaries
  * - notebook_moods
- * - notebook_todos
  * - notebook_casuals
  *
  * 注意：小程序端单次 get 最多 20 条，列表查询需分页拉全。
@@ -100,6 +98,7 @@ export async function getTodayPlan() {
   return {
     _id: items[0]._id,
     content: buildDayPlanContent(items),
+    todoDone: items[0].todoDone || {},
   }
 }
 
@@ -125,6 +124,7 @@ export async function saveTodayPlan(content) {
       data: {
         date: today,
         content: text,
+        todoDone: {},
         createdAt: now,
         updatedAt: now,
       },
@@ -141,6 +141,21 @@ export async function saveTodayPlan(content) {
   for (let i = 1; i < items.length; i++) {
     await db.collection('notebook_plans').doc(items[i]._id).remove()
   }
+}
+
+/** 只更新当日计划的待办勾选覆盖态（需已有当日计划文档） */
+export async function savePlanTodoDone(todoDone) {
+  const today = getToday()
+  const items = await fetchAll(() => db.collection('notebook_plans').where({ date: today }))
+  if (!items.length) {
+    throw new Error('NO_PLAN')
+  }
+  await db.collection('notebook_plans').doc(items[0]._id).update({
+    data: {
+      todoDone: todoDone || {},
+      updatedAt: Date.now(),
+    },
+  })
 }
 
 /** 历史计划：除今日外，按日期倒序；同日多条合并正文 */
@@ -171,128 +186,6 @@ export async function removePlanByDate(date) {
   const items = await fetchAll(() => db.collection('notebook_plans').where({ date: date }))
   for (let i = 0; i < items.length; i++) {
     await db.collection('notebook_plans').doc(items[i]._id).remove()
-  }
-}
-
-// ─── 日记（一天一篇）─────────────────────────────────────
-
-/** 获取今日日记；同日多条时取最新一条并拼接正文 */
-export async function getTodayDiary() {
-  const today = getToday()
-  const items = await fetchAll(() => db.collection('notebook_diaries').where({ date: today }))
-  if (!items.length) return null
-
-  items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-  const first = items[0]
-  let content = first.content || ''
-  if (items.length > 1) {
-    content = items
-      .map((item) => {
-        const parts = []
-        if (item.title) parts.push(item.title)
-        if (item.content) parts.push(item.content)
-        return parts.join('\n')
-      })
-      .filter(Boolean)
-      .join('\n\n')
-  }
-  return {
-    _id: first._id,
-    date: today,
-    title: first.title || '',
-    content,
-    mood: first.mood || '',
-  }
-}
-
-/**
- * 保存今日日记：空内容且无标题则删当日记录；
- * 有则更新第一条并清理当日其余旧文档
- */
-export async function saveTodayDiary(data) {
-  const title = (data.title || '').trim()
-  const content = (data.content || '').trim()
-  const mood = data.mood || ''
-  const today = getToday()
-  const items = await fetchAll(() => db.collection('notebook_diaries').where({ date: today }))
-  const now = Date.now()
-
-  if (!title && !content && !mood) {
-    for (let i = 0; i < items.length; i++) {
-      await db.collection('notebook_diaries').doc(items[i]._id).remove()
-    }
-    return
-  }
-
-  const payload = {
-    date: today,
-    title: title || '今日日记',
-    content,
-    mood,
-    updatedAt: now,
-  }
-
-  if (!items.length) {
-    await db.collection('notebook_diaries').add({
-      data: { ...payload, createdAt: now },
-    })
-    return
-  }
-
-  items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-  await db.collection('notebook_diaries').doc(items[0]._id).update({ data: payload })
-  for (let i = 1; i < items.length; i++) {
-    await db.collection('notebook_diaries').doc(items[i]._id).remove()
-  }
-}
-
-/** 历史日记：除今日外，按日期倒序 */
-export async function getDiaryHistory() {
-  const today = getToday()
-  const items = await fetchAll(() => db.collection('notebook_diaries'))
-  const groups = {}
-
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]
-    const date = item.date
-    if (!date || date === today) continue
-    if (!groups[date]) groups[date] = []
-    groups[date].push(item)
-  }
-
-  const dates = Object.keys(groups).sort().reverse()
-  return dates.map((date) => {
-    const list = groups[date]
-    list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-    const first = list[0]
-    let content = first.content || ''
-    if (list.length > 1) {
-      content = list
-        .map((item) => {
-          const parts = []
-          if (item.title) parts.push(item.title)
-          if (item.content) parts.push(item.content)
-          return parts.join('\n')
-        })
-        .filter(Boolean)
-        .join('\n\n')
-    }
-    return {
-      date,
-      _id: first._id,
-      title: first.title || '日记',
-      content,
-      mood: first.mood || '',
-    }
-  })
-}
-
-/** 删除某一天的全部日记 */
-export async function removeDiaryByDate(date) {
-  if (!date) return
-  const items = await fetchAll(() => db.collection('notebook_diaries').where({ date: date }))
-  for (let i = 0; i < items.length; i++) {
-    await db.collection('notebook_diaries').doc(items[i]._id).remove()
   }
 }
 
@@ -342,42 +235,6 @@ export async function upsertMood(data) {
     data: { ...data, note: data.note || '', createdAt: now, updatedAt: now },
   })
   return res._id
-}
-
-// ─── 待办 ───────────────────────────────────────────────
-
-/**
- * @param {'all'|'active'|'done'} filter
- */
-export async function getTodos(filter = 'all') {
-  return fetchAll(() => {
-    let query = db.collection('notebook_todos')
-    if (filter === 'active') {
-      query = query.where({ done: false })
-    } else if (filter === 'done') {
-      query = query.where({ done: true })
-    }
-    return query.orderBy('createdAt', 'desc')
-  })
-}
-
-export async function addTodo(title) {
-  const now = Date.now()
-  const res = await db.collection('notebook_todos').add({
-    data: { title, done: false, dueDate: '', createdAt: now, updatedAt: now },
-  })
-  return res._id
-}
-
-export async function toggleTodo(id, done) {
-  await db
-    .collection('notebook_todos')
-    .doc(id)
-    .update({ data: { done, updatedAt: Date.now() } })
-}
-
-export async function removeTodo(id) {
-  await db.collection('notebook_todos').doc(id).remove()
 }
 
 // ─── 随心记 ─────────────────────────────────────────────

@@ -1,0 +1,45 @@
+---
+description: 云数据库：全量拉取、少建集合
+alwaysApply: true
+---
+
+# 云数据库约定
+
+## 列表必须拉全量
+
+微信云开发单次 `get` **最多返回 20 条**（平台硬限制）。
+
+- **禁止**只调一次 `.limit(20).get()` 就当「全部数据」
+- **禁止**用业务层的 `slice(0, 20)` / `limit=20` 截断列表查询结果当作全量（展示层截断 UI 可以，但连续天数、统计、删除前列表等必须基于全量）
+- **必须**用 `skip` + `limit(20)` **循环**直到本批不足 20 条，拼成完整数组再返回
+
+```javascript
+// ✅ 拉全量
+async function fetchAllWhere(where) {
+  const all = []
+  let skip = 0
+  const BATCH = 20
+  while (true) {
+    const res = await db.collection('xxx').where(where).skip(skip).limit(BATCH).get()
+    const batch = res.data || []
+    for (let i = 0; i < batch.length; i++) all.push(batch[i])
+    if (batch.length < BATCH) break
+    skip += BATCH
+  }
+  return all
+}
+
+// ❌ 只取一页，第 21 条起永远丢
+const res = await db.collection('xxx').limit(20).get()
+return res.data
+```
+
+变量可叫 `BATCH` / `PAGE_SIZE`，含义只能是「单次请求上限」，注释写清，避免被理解成「业务只保留 20 条」。
+
+## 少建集合
+
+- 同一功能域能用 **一个集合 + `kind` / `type` 字段** 区分文档时，**不要**拆成多个集合
+- 例：Serious 用集合 `serious`，`kind: checkin | stamp | night | reflection`
+- 新建云能力前先问：能否并入已有集合？能则合并
+
+仅当权限模型、生命周期或查询形态明显不同（如公共配置 vs 用户私有流水）时才新建集合。

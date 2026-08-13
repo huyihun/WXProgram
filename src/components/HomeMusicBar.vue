@@ -1,16 +1,14 @@
 <template>
-  <view class="music-root">
+  <view class="music-root" :class="{ 'music-root--gold': isMaster }">
     <!-- 曲目列表面板 -->
-    <view
-      v-if="sheetOpen"
-      class="sheet-mask"
-      @tap="closeSheet"
-      @touchmove.stop.prevent
-    />
+    <view v-if="sheetOpen" class="sheet-mask" @tap="closeSheet" @touchmove.stop.prevent />
     <view
       v-if="sheetOpen"
       class="sheet"
-      :class="{ 'sheet--vip': isPremium, 'sheet--super': isSuper }"
+      :class="{
+        'sheet--vip': isVip,
+        'sheet--gold': isMaster,
+      }"
       @tap.stop
       @touchmove.stop
     >
@@ -20,9 +18,15 @@
         <text class="sheet-count">{{ playlist.length }} 首</text>
         <text class="sheet-close" @tap="closeSheet">收起</text>
       </view>
-      <scroll-view scroll-y class="sheet-scroll" :show-scrollbar="false">
+      <scroll-view
+        scroll-y
+        class="sheet-scroll"
+        :scroll-into-view="sheetScrollInto"
+        :show-scrollbar="false"
+      >
         <view
           v-for="(item, i) in playlist"
+          :id="'track-' + i"
           :key="item.id"
           class="sheet-item"
           :class="{ active: i === currentIndex, playing: i === currentIndex && playing }"
@@ -53,11 +57,7 @@
                 <view class="ico-pin-needle" />
               </view>
             </view>
-            <view
-              class="sheet-del"
-              hover-class="sheet-del--active"
-              @tap.stop="onDeleteTrack(i)"
-            >
+            <view class="sheet-del" hover-class="sheet-del--active" @tap.stop="onDeleteTrack(i)">
               <view class="ico-trash">
                 <view class="ico-trash-cap" />
                 <view class="ico-trash-lid" />
@@ -66,7 +66,6 @@
             </view>
           </view>
         </view>
-        <!-- 给底部播放条留空，避免最后一首被挡住 -->
         <view class="sheet-scroll-tail" />
       </scroll-view>
     </view>
@@ -78,12 +77,7 @@
       @tap="closePlaylistPicker"
       @touchmove.stop.prevent
     />
-    <view
-      v-if="playlistPickerOpen"
-      class="picker-sheet"
-      @tap.stop
-      @touchmove.stop
-    >
+    <view v-if="playlistPickerOpen" class="picker-sheet" @tap.stop @touchmove.stop>
       <view class="sheet-handle" />
       <view class="picker-head">
         <text class="picker-title">切换歌单</text>
@@ -100,6 +94,14 @@
           <text class="picker-item-name">{{ opt.name }}</text>
           <text class="picker-item-desc">{{ opt.desc }}</text>
         </view>
+        <view
+          class="picker-default"
+          :class="{ on: preferredMode === opt.mode }"
+          hover-class="picker-default--active"
+          @tap.stop="onSetDefaultPlaylist(opt.mode)"
+        >
+          <text class="picker-star">{{ preferredMode === opt.mode ? '★' : '☆' }}</text>
+        </view>
         <text v-if="mode === opt.mode" class="picker-check">✓</text>
       </view>
       <view class="picker-tail" />
@@ -108,9 +110,25 @@
     <!-- 底部播放条 -->
     <view
       class="music-bar"
-      :class="{ playing: playing, 'music-bar--vip': isPremium, 'music-bar--super': isSuper }"
+      :class="{
+        playing: playing,
+        'music-bar--vip': isVip,
+        'music-bar--gold': isMaster,
+        'music-bar--dl': showDownloadBar,
+      }"
     >
-      <view class="music-accent" :class="{ on: playing }" />
+      <view v-if="showDownloadBar" class="music-dl">
+        <view class="music-dl-top">
+          <text class="music-dl-label">母带载入</text>
+          <text class="music-dl-pct">{{ downloadProgress }}%</text>
+        </view>
+        <view class="music-dl-track">
+          <view class="music-dl-fill" :style="{ width: downloadProgress + '%' }">
+            <view class="music-dl-shine" />
+          </view>
+        </view>
+      </view>
+      <view v-else class="music-accent" :class="{ on: playing }" />
 
       <view class="music-body">
         <view class="music-info">
@@ -120,28 +138,11 @@
               spinning: playing && !isDownloading,
               idle: !playing && !isDownloading,
               loading: isDownloading,
-              'music-disc--vip': isPremium,
+              'music-disc--vip': isVip,
+              'music-disc--gold': isMaster,
             }"
           >
-            <image
-              v-if="isSuper"
-              class="disc-cover"
-              src="/static/rossi.jpg"
-              mode="aspectFill"
-            />
-            <image
-              v-else-if="isVip"
-              class="disc-cover"
-              src="/static/juluo.jpg"
-              mode="aspectFill"
-            />
-            <view v-else class="disc-default">
-              <view class="disc-ring disc-ring-outer" />
-              <view class="disc-groove g1" />
-              <view class="disc-groove g2" />
-              <view class="disc-ring disc-ring-mid" />
-              <view class="disc-ring disc-ring-inner" />
-            </view>
+            <image class="disc-cover" :src="discCover" mode="aspectFill" />
             <view class="disc-hub" />
             <view class="disc-shine" />
             <view class="disc-glow" />
@@ -152,7 +153,13 @@
           </view>
 
           <view class="music-text">
-            <view class="vip-badge" :class="{ 'vip-badge--super': isSuper, 'vip-badge--vip': isVip }">
+            <view
+              class="vip-badge"
+              :class="{
+                'vip-badge--vip': isVip,
+                'vip-badge--gold': isMaster,
+              }"
+            >
               <text class="vip-badge-text">{{ badgeText }}</text>
             </view>
             <text class="music-title">{{ track.title || '暂无歌曲' }}</text>
@@ -194,11 +201,7 @@
             </view>
           </view>
 
-          <view
-            class="switch-btn"
-            hover-class="switch-btn--active"
-            @tap="togglePlaylistPicker"
-          >
+          <view class="switch-btn" hover-class="switch-btn--active" @tap="togglePlaylistPicker">
             <view class="ico-switch">
               <view class="ico-switch-layer l1" />
               <view class="ico-switch-layer l2" />
@@ -213,88 +216,102 @@
 
 <script setup>
 import {
-  MUSIC_MODE_DEFAULT,
+  MUSIC_MODE_SUPER_PLAYER,
   MUSIC_MODE_VIP,
-  MUSIC_MODE_SUPER,
-  MUSIC_MODE_JX,
-  subscribeBgMusic,
-  prefetchBgMusic,
-  toggleBgMusic,
-  playPrevBgMusic,
-  playNextBgMusic,
-  playTrackAt,
+  subscribeInnerMusic,
+  toggleInnerMusic,
+  playPrevInnerMusic,
+  playNextInnerMusic,
+  playInnerTrackAt,
+  pinInnerTrackAt,
+  removeInnerTrackAt,
+  isInnerTrackPinned,
   switchMusicMode,
-  removeTrackAt,
-  pinTrackAt,
-  isTrackPinned,
   loadMusicPrefsAndRefresh,
-} from '@/utils/bgMusic'
+  getPreferredMusicMode,
+  setPreferredMusicMode,
+  getPlaylistOptions,
+  isMasterMusicMode,
+  isWifiOnlyMusicMode,
+  getModeMeta,
+} from '@/utils/innerMusic'
+import { isWifiNetwork } from '@/utils/playlist'
 
 const playlist = ref([])
 const playing = ref(false)
 const loading = ref(false)
 const ready = ref(false)
 const currentIndex = ref(0)
-const mode = ref(MUSIC_MODE_SUPER)
+const mode = ref(MUSIC_MODE_SUPER_PLAYER)
 const track = ref({ title: '', artist: '', fileID: '', id: '' })
 const sheetOpen = ref(false)
+const sheetScrollInto = ref('')
 const playlistPickerOpen = ref(false)
+const preferredMode = ref(MUSIC_MODE_SUPER_PLAYER)
 const deleting = ref(false)
+const downloadProgress = ref(0)
 
-const playlistOptions = [
-  { mode: MUSIC_MODE_JX, name: '就几首歌而已', desc: '也就200多首吧' },
-  { mode: MUSIC_MODE_SUPER, name: '周杰伦歌单', desc: '超级VIP' },
-  { mode: MUSIC_MODE_VIP, name: 'VIP专属', desc: '毛不易 / 陈粒' },
-  { mode: MUSIC_MODE_DEFAULT, name: '默认歌单', desc: '日常精选' },
-]
+const playlistOptions = getPlaylistOptions()
 
 let unsubscribe = null
 
+const isMaster = computed(() => isMasterMusicMode(mode.value))
+const isWifiOnly = computed(() => isWifiOnlyMusicMode(mode.value))
 const isVip = computed(() => mode.value === MUSIC_MODE_VIP)
-const isSuper = computed(() => mode.value === MUSIC_MODE_SUPER)
-const isJx = computed(() => mode.value === MUSIC_MODE_JX)
-const isPremium = computed(() => isVip.value || isSuper.value)
+const modeMeta = computed(() => getModeMeta(mode.value))
 
-const sheetTitle = computed(() => {
-  if (isJx.value) return '就几首歌而已'
-  if (isSuper.value) return '周杰伦歌单'
-  if (isVip.value) return 'VIP专属歌单'
-  return '默认歌单'
-})
-
-const badgeText = computed(() => {
-  if (isJx.value) return '几首'
-  if (isSuper.value) return '周杰伦'
-  if (isVip.value) return 'VIP专属'
-  return '默认'
-})
+const sheetTitle = computed(() => (modeMeta.value && modeMeta.value.label) || '歌单')
+const badgeText = computed(() => (modeMeta.value && modeMeta.value.badge) || '')
+const discCover = computed(() => (modeMeta.value && modeMeta.value.cover) || '/static/rossi.jpg')
 
 const isDownloading = computed(() => loading.value && !ready.value)
+const showDownloadBar = computed(() => isMaster.value && isDownloading.value)
 
 const statusText = computed(() => {
   const artist = track.value.artist || ''
+  if (isMaster.value && isDownloading.value) {
+    if (downloadProgress.value > 0) return '母带下载中 · ' + downloadProgress.value + '%'
+    return '正在准备母带…'
+  }
+  if (isWifiOnly.value && playing.value) {
+    return artist ? artist + ' · Wi‑Fi' : 'Wi‑Fi 播放中'
+  }
   if (playing.value) {
     return artist ? artist + ' · 播放中' : '播放中'
   }
   return artist || ''
 })
 
+function applyMusicState(state) {
+  playing.value = state.playing
+  loading.value = state.loading
+  ready.value = state.ready
+  currentIndex.value = state.index
+  track.value = state.track
+  mode.value = state.mode
+  downloadProgress.value = state.downloadProgress != null ? state.downloadProgress : 0
+  playlist.value = state.playlist || []
+}
+
+function bindPlayer() {
+  if (unsubscribe) {
+    unsubscribe()
+    unsubscribe = null
+  }
+  unsubscribe = subscribeInnerMusic(applyMusicState)
+}
+
 onMounted(() => {
-  unsubscribe = subscribeBgMusic((state) => {
-    playing.value = state.playing
-    loading.value = state.loading
-    ready.value = state.ready
-    currentIndex.value = state.index
-    track.value = state.track
-    mode.value = state.mode
-    playlist.value = state.playlist || []
-  })
+  bindPlayer()
   loadMusicPrefsAndRefresh()
-    .then(() => switchMusicMode(MUSIC_MODE_SUPER))
-    .then(() => prefetchBgMusic())
+    .then(() => {
+      preferredMode.value = getPreferredMusicMode()
+      return switchMusicMode(preferredMode.value)
+    })
     .catch((err) => {
       console.warn('音乐偏好加载失败', err)
-      switchMusicMode(MUSIC_MODE_SUPER).then(() => prefetchBgMusic())
+      preferredMode.value = getPreferredMusicMode()
+      switchMusicMode(preferredMode.value)
     })
 })
 
@@ -306,20 +323,26 @@ onUnmounted(() => {
 })
 
 function onToggle() {
-  toggleBgMusic()
+  toggleInnerMusic()
 }
 
 function onPrev() {
-  playPrevBgMusic()
+  playPrevInnerMusic()
 }
 
 function onNext() {
-  playNextBgMusic()
+  playNextInnerMusic()
 }
 
 function toggleSheet() {
   playlistPickerOpen.value = false
-  sheetOpen.value = !sheetOpen.value
+  const next = !sheetOpen.value
+  sheetOpen.value = next
+  if (!next) return
+  sheetScrollInto.value = ''
+  nextTick(() => {
+    sheetScrollInto.value = 'track-' + currentIndex.value
+  })
 }
 
 function closeSheet() {
@@ -328,6 +351,7 @@ function closeSheet() {
 
 function togglePlaylistPicker() {
   sheetOpen.value = false
+  preferredMode.value = getPreferredMusicMode()
   playlistPickerOpen.value = !playlistPickerOpen.value
 }
 
@@ -338,23 +362,45 @@ function closePlaylistPicker() {
 async function onPickPlaylist(targetMode) {
   playlistPickerOpen.value = false
   if (targetMode === mode.value) return
+  if (isWifiOnlyMusicMode(targetMode)) {
+    const wifi = await isWifiNetwork()
+    if (!wifi) {
+      const res = await uni.showModal({
+        content: '连WI-FI才能听，毕竟是母带音质，懂？',
+        confirmText: '懂',
+        cancelText: '不懂',
+      })
+      if (!res.confirm) return
+    }
+  }
   await switchMusicMode(targetMode)
 }
 
+async function onSetDefaultPlaylist(targetMode) {
+  try {
+    preferredMode.value = await setPreferredMusicMode(targetMode)
+    uni.showToast({ title: '已设为默认歌单', icon: 'none' })
+  } catch (err) {
+    console.error('设置默认歌单失败', err)
+    const msg = (err && err.message) || '设置失败'
+    uni.showToast({ title: String(msg).slice(0, 20), icon: 'none' })
+  }
+}
+
 function onPickTrack(i) {
-  playTrackAt(i)
+  playInnerTrackAt(i)
   sheetOpen.value = false
 }
 
 function isPinned(fileID) {
-  return isTrackPinned(fileID)
+  return isInnerTrackPinned(fileID)
 }
 
 async function onPinTrack(i) {
   const item = playlist.value[i]
   if (!item) return
   try {
-    await pinTrackAt(i)
+    await pinInnerTrackAt(i)
     uni.showToast({ title: '已置顶', icon: 'none' })
   } catch (err) {
     console.error('置顶失败', err)
@@ -377,7 +423,7 @@ function onDeleteTrack(i) {
       if (!res.confirm) return
       deleting.value = true
       try {
-        await removeTrackAt(i)
+        await removeInnerTrackAt(i)
         uni.showToast({ title: '已删除', icon: 'success' })
       } catch (err) {
         console.error('删除歌曲失败', err)
@@ -405,6 +451,38 @@ function onDeleteTrack(i) {
   pointer-events: auto;
 }
 
+.music-root--gold .music-bar--gold {
+  border: 4rpx solid #d4a017;
+  box-shadow:
+    0 0 0 2rpx rgba(255, 215, 100, 0.55),
+    0 -8rpx 28rpx rgba(180, 130, 40, 0.28);
+  background: linear-gradient(180deg, #fff9e8 0%, #fff 55%);
+}
+
+.music-root--gold .sheet--gold {
+  border: 4rpx solid #d4a017;
+  border-bottom: none;
+  box-shadow:
+    0 0 0 2rpx rgba(255, 215, 100, 0.4),
+    0 -12rpx 40rpx rgba(180, 130, 40, 0.22);
+}
+
+.sheet--gold .sheet-title {
+  color: #8a6418;
+}
+
+.vip-badge--gold {
+  background: linear-gradient(135deg, #f0d78c 0%, #c9a227 100%);
+}
+
+.vip-badge--gold .vip-badge-text {
+  color: #5c4308;
+}
+
+.music-disc--gold {
+  box-shadow: 0 0 0 3rpx rgba(212, 160, 23, 0.55);
+}
+
 .sheet-mask {
   position: fixed;
   left: 0;
@@ -421,7 +499,7 @@ function onDeleteTrack(i) {
   right: 0;
   bottom: 0;
   z-index: 131;
-  max-height: 62vh;
+  max-height: 78vh;
   display: flex;
   flex-direction: column;
   background: $color-card;
@@ -474,8 +552,8 @@ function onDeleteTrack(i) {
 
 .sheet-scroll {
   flex: 1;
-  height: 48vh;
-  max-height: 48vh;
+  height: 64vh;
+  max-height: 64vh;
   padding: 0 20rpx;
   box-sizing: border-box;
 }
@@ -530,6 +608,7 @@ function onDeleteTrack(i) {
   flex-direction: column;
   gap: 6rpx;
   min-width: 0;
+  flex: 1;
 }
 
 .picker-item-name {
@@ -551,7 +630,36 @@ function onDeleteTrack(i) {
   font-size: 32rpx;
   font-weight: 700;
   color: $color-primary-dark;
-  margin-left: 16rpx;
+  margin-left: 8rpx;
+}
+
+.picker-default {
+  width: 56rpx;
+  height: 56rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14rpx;
+  margin-left: 8rpx;
+}
+
+.picker-default--active {
+  background: rgba(74, 159, 232, 0.12);
+}
+
+.picker-default.on {
+  background: rgba(74, 159, 232, 0.14);
+}
+
+.picker-star {
+  font-size: 34rpx;
+  line-height: 1;
+  color: rgba(120, 140, 160, 0.55);
+}
+
+.picker-default.on .picker-star {
+  color: $color-primary-dark;
 }
 
 .picker-tail {
@@ -835,6 +943,80 @@ function onDeleteTrack(i) {
   );
 }
 
+/* 超级播放器：母带下载进度 */
+.music-dl {
+  padding: 16rpx 28rpx 4rpx;
+  box-sizing: border-box;
+}
+
+.music-dl-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
+}
+
+.music-dl-label {
+  font-size: 20rpx;
+  font-weight: 600;
+  letter-spacing: 2rpx;
+  color: #9a7420;
+}
+
+.music-dl-pct {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #8a6418;
+  font-variant-numeric: tabular-nums;
+}
+
+.music-dl-track {
+  height: 10rpx;
+  border-radius: 999rpx;
+  overflow: hidden;
+  background: rgba(180, 140, 50, 0.14);
+  box-shadow: inset 0 1rpx 2rpx rgba(90, 60, 10, 0.08);
+}
+
+.music-dl-fill {
+  position: relative;
+  height: 100%;
+  width: 0;
+  border-radius: 999rpx;
+  overflow: hidden;
+  background: linear-gradient(90deg, #e8c56a 0%, #d4a017 45%, #f0d78c 100%);
+  box-shadow: 0 0 12rpx rgba(212, 160, 23, 0.45);
+  transition: width 0.18s linear;
+}
+
+.music-dl-shine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  animation: music-dl-shine 1.4s ease-in-out infinite;
+}
+
+@keyframes music-dl-shine {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 120%;
+  }
+}
+
+.music-bar--dl .music-body {
+  padding-top: 18rpx;
+}
+
 .music-body {
   display: flex;
   align-items: center;
@@ -843,19 +1025,11 @@ function onDeleteTrack(i) {
   gap: 8rpx;
   min-height: 120rpx;
   box-sizing: border-box;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.55) 0%,
-    rgba(255, 255, 255, 0.22) 100%
-  );
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.22) 100%);
 }
 
 .music-bar--vip .music-body {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 248, 232, 0.7) 0%,
-    rgba(255, 255, 255, 0.28) 100%
-  );
+  background: linear-gradient(180deg, rgba(255, 248, 232, 0.7) 0%, rgba(255, 255, 255, 0.28) 100%);
 }
 
 .music-info {
@@ -901,13 +1075,6 @@ function onDeleteTrack(i) {
   border-radius: 50%;
 }
 
-.disc-default {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-}
 
 .music-disc--vip {
   box-shadow: 0 0 0 2rpx rgba(201, 152, 46, 0.45);
@@ -917,58 +1084,12 @@ function onDeleteTrack(i) {
   background: radial-gradient(circle, rgba(212, 168, 75, 0.4) 0%, transparent 70%);
 }
 
-.disc-ring {
-  position: absolute;
-  border-radius: 50%;
-  box-sizing: border-box;
-}
 
-.disc-ring-outer {
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  background: linear-gradient(145deg, #3a5f7a 0%, #1a3348 48%, #2b4a63 100%);
-  box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.12);
-}
 
-.disc-groove {
-  position: absolute;
-  border-radius: 50%;
-  border: 1rpx solid rgba(255, 255, 255, 0.06);
-  box-sizing: border-box;
-}
 
-.disc-groove.g1 {
-  left: 8rpx;
-  right: 8rpx;
-  top: 8rpx;
-  bottom: 8rpx;
-}
 
-.disc-groove.g2 {
-  left: 18rpx;
-  right: 18rpx;
-  top: 18rpx;
-  bottom: 18rpx;
-}
 
-.disc-ring-mid {
-  left: 28rpx;
-  right: 28rpx;
-  top: 28rpx;
-  bottom: 28rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.14);
-  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.1), transparent 55%);
-}
 
-.disc-ring-inner {
-  left: 38rpx;
-  right: 38rpx;
-  top: 38rpx;
-  bottom: 38rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.1);
-}
 
 .disc-hub {
   position: absolute;
@@ -1077,9 +1198,6 @@ function onDeleteTrack(i) {
   background: linear-gradient(90deg, #e8c56a 0%, #c9982e 100%);
 }
 
-.vip-badge--super {
-  background: linear-gradient(90deg, #3a2a12 0%, #8a6418 100%);
-}
 
 .vip-badge-text {
   font-size: 18rpx;
@@ -1093,9 +1211,6 @@ function onDeleteTrack(i) {
   color: #5c4010;
 }
 
-.vip-badge--super .vip-badge-text {
-  color: #ffe9b0;
-}
 
 .music-title {
   display: block;

@@ -16,7 +16,7 @@
         </view>
       </view>
 
-      <view v-if="loading" class="status-tip">加载中...</view>
+      <PageLoading v-if="loading" />
       <view v-else-if="list.length === 0" class="status-tip">还没有日常消耗品，先添加一件吧</view>
       <view v-else class="supply-list">
         <view v-for="item in list" :key="item._id" class="supply-item">
@@ -164,7 +164,7 @@ const totalValue = computed(() => {
   return sum.toFixed(2)
 })
 
-onShow(() => {
+onMounted(() => {
   loadList()
 })
 

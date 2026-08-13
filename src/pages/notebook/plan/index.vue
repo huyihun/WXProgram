@@ -11,7 +11,7 @@
           <text class="hero-meta">{{ filledCount }} 条安排</text>
         </view>
 
-        <view v-if="loading" class="status-tip">加载中...</view>
+        <PageLoading v-if="loading" />
 
         <scroll-view v-else scroll-y class="edit-area" :show-scrollbar="false">
           <view
@@ -94,6 +94,9 @@
         >
           <text class="bar-btn-text">清空</text>
         </view>
+        <view class="bar-btn" hover-class="bar-btn--active" @tap="openTodo">
+          <text class="bar-btn-text">待办</text>
+        </view>
         <view
           class="bar-btn primary"
           :class="{ disabled: saving }"
@@ -108,62 +111,94 @@
     <view
       class="sheet-mask"
       :class="{ show: panelOpen }"
-      @tap="closeHistory"
+      @tap="closeSheet"
       @touchmove.stop.prevent
     />
     <view class="sheet" :class="{ open: panelOpen }" @touchmove.stop>
       <view class="sheet-handle" />
-      <view class="panel-header">
-        <text class="panel-title">{{ detailItem ? '计划详情' : '历史计划' }}</text>
-        <text class="panel-close" @tap="onSheetClose">
-          {{ detailItem ? '返回' : '关闭' }}
-        </text>
-      </view>
 
-      <view v-if="detailItem" class="detail">
-        <text class="detail-date">{{ formatHistDate(detailItem.date) }}</text>
-        <scroll-view scroll-y class="detail-scroll">
-          <view v-for="(line, i) in detailLines" :key="i" class="detail-line">
-            <text class="detail-text">{{ line || '（空）' }}</text>
+      <!-- 今日待办 -->
+      <template v-if="sheetKind === 'todo'">
+        <view class="panel-header">
+          <text class="panel-title">今日待办</text>
+          <text class="panel-close" @tap="closeSheet">关闭</text>
+        </view>
+        <view v-if="todoList.length === 0" class="panel-empty">暂无安排，先在计划里加点内容</view>
+        <scroll-view v-else scroll-y class="panel-scroll">
+          <view v-for="item in todoList" :key="item.key" class="todo-row">
+            <view class="todo-check" @tap="toggleTodoDone(item)">
+              <view class="checkbox" :class="{ checked: item.done }">
+                <text v-if="item.done" class="check-mark">✓</text>
+              </view>
+            </view>
+            <view class="todo-main">
+              <text class="todo-time">{{ item.timeLabel }}</text>
+              <text class="todo-title" :class="{ done: item.done }">{{ item.text }}</text>
+            </view>
           </view>
         </scroll-view>
-        <view class="detail-actions">
-          <view class="bar-btn primary grow" hover-class="bar-btn--active" @tap="reuseToToday">
-            <text class="bar-btn-text primary-text">填入今天</text>
-          </view>
-          <view
-            class="bar-btn ghost"
-            hover-class="bar-btn--active"
-            @tap="handleDeleteHistory(detailItem)"
-          >
-            <text class="bar-btn-text">删除</text>
-          </view>
-        </view>
-      </view>
+      </template>
 
-      <view v-else-if="historyLoading" class="panel-empty">加载中...</view>
-      <view v-else-if="historyList.length === 0" class="panel-empty">还没有历史计划</view>
-      <scroll-view v-else scroll-y class="panel-scroll">
-        <view
-          v-for="item in historyList"
-          :key="item.date"
-          class="hist-item"
-          hover-class="hist-item--active"
-          @tap="openDetail(item)"
-        >
-          <view class="hist-top">
-            <text class="hist-date">{{ formatHistDate(item.date) }}</text>
-            <text class="hist-count">{{ countLines(item.content) }} 条</text>
-          </view>
-          <text class="hist-summary">{{ summarize(item.content) }}</text>
+      <!-- 历史计划 -->
+      <template v-else>
+        <view class="panel-header">
+          <text class="panel-title">{{ detailItem ? '计划详情' : '历史计划' }}</text>
+          <text class="panel-close" @tap="onSheetClose">
+            {{ detailItem ? '返回' : '关闭' }}
+          </text>
         </view>
-      </scroll-view>
+
+        <view v-if="detailItem" class="detail">
+          <text class="detail-date">{{ formatHistDate(detailItem.date) }}</text>
+          <scroll-view scroll-y class="detail-scroll">
+            <view v-for="(line, i) in detailLines" :key="i" class="detail-line">
+              <text class="detail-text">{{ line || '（空）' }}</text>
+            </view>
+          </scroll-view>
+          <view class="detail-actions">
+            <view class="bar-btn primary grow" hover-class="bar-btn--active" @tap="reuseToToday">
+              <text class="bar-btn-text primary-text">填入今天</text>
+            </view>
+            <view
+              class="bar-btn ghost"
+              hover-class="bar-btn--active"
+              @tap="handleDeleteHistory(detailItem)"
+            >
+              <text class="bar-btn-text">删除</text>
+            </view>
+          </view>
+        </view>
+
+        <view v-else-if="historyLoading" class="panel-empty">加载中...</view>
+        <view v-else-if="historyList.length === 0" class="panel-empty">还没有历史计划</view>
+        <scroll-view v-else scroll-y class="panel-scroll">
+          <view
+            v-for="item in historyList"
+            :key="item.date"
+            class="hist-item"
+            hover-class="hist-item--active"
+            @tap="openDetail(item)"
+          >
+            <view class="hist-top">
+              <text class="hist-date">{{ formatHistDate(item.date) }}</text>
+              <text class="hist-count">{{ countLines(item.content) }} 条</text>
+            </view>
+            <text class="hist-summary">{{ summarize(item.content) }}</text>
+          </view>
+        </scroll-view>
+      </template>
     </view>
   </PageRoot>
 </template>
 
 <script setup>
-import { getTodayPlan, saveTodayPlan, getPlanHistory, removePlanByDate } from '@/api/notebook'
+import {
+  getTodayPlan,
+  saveTodayPlan,
+  savePlanTodoDone,
+  getPlanHistory,
+  removePlanByDate,
+} from '@/api/notebook'
 
 /** 09:00-12:00 内容 或旧格式 09:00 内容 */
 const RANGE_RE = /^(\d{1,2}:\d{2})\s*[-~～—]\s*(\d{1,2}:\d{2})\s+(.*)$/
@@ -183,9 +218,14 @@ const saving = ref(false)
 const bgSrc = ref('')
 
 const panelOpen = ref(false)
+/** '' | 'history' | 'todo' */
+const sheetKind = ref('')
 const historyList = ref([])
 const historyLoading = ref(false)
 const detailItem = ref(null)
+/** 手动勾选覆盖：key -> boolean */
+const todoDoneMap = ref({})
+const todoToggling = ref(false)
 
 const todayText = computed(() => {
   const d = new Date()
@@ -233,6 +273,33 @@ const filledCount = computed(() => {
 const detailLines = computed(() => {
   if (!detailItem.value || !detailItem.value.content) return ['（空）']
   return detailItem.value.content.split('\n')
+})
+
+const todoList = computed(() => {
+  const nowMins = currentMinutes()
+  const list = []
+  for (let i = 0; i < items.value.length; i++) {
+    const it = items.value[i]
+    const text = (it.text || '').trim()
+    if (!text) continue
+    const start = (it.startTime || '').trim()
+    const end = (it.endTime || '').trim()
+    const key = todoKey(start, end, text)
+    const autoDone = isPastPlanTime(start, end, nowMins)
+    const override = todoDoneMap.value[key]
+    const done = override === undefined ? autoDone : !!override
+    list.push({
+      key,
+      text,
+      start,
+      end,
+      timeLabel: formatTodoTime(start, end),
+      sort: start ? timeToMinutes(start) : 9999,
+      done,
+    })
+  }
+  list.sort((a, b) => a.sort - b.sort)
+  return list
 })
 
 function buildTimeOptions() {
@@ -461,13 +528,25 @@ async function loadHistory() {
 
 function openHistory() {
   detailItem.value = null
+  sheetKind.value = 'history'
   panelOpen.value = true
   loadHistory()
 }
 
-function closeHistory() {
-  panelOpen.value = false
+function openTodo() {
   detailItem.value = null
+  sheetKind.value = 'todo'
+  panelOpen.value = true
+}
+
+function closeSheet() {
+  panelOpen.value = false
+  sheetKind.value = ''
+  detailItem.value = null
+}
+
+function closeHistory() {
+  closeSheet()
 }
 
 function onSheetClose() {
@@ -475,7 +554,64 @@ function onSheetClose() {
     detailItem.value = null
     return
   }
-  closeHistory()
+  closeSheet()
+}
+
+function todoKey(start, end, text) {
+  return (start || '') + '|' + (end || '') + '|' + (text || '')
+}
+
+function timeToMinutes(time) {
+  if (!time) return -1
+  const parts = time.split(':')
+  if (parts.length < 2) return -1
+  return Number(parts[0]) * 60 + Number(parts[1])
+}
+
+function currentMinutes() {
+  const d = new Date()
+  return d.getHours() * 60 + d.getMinutes()
+}
+
+/** 已过计划时间：优先结束时间，否则开始时间 */
+function isPastPlanTime(start, end, nowMins) {
+  const mark = end || start
+  if (!mark) return false
+  const m = timeToMinutes(mark)
+  if (m < 0) return false
+  return nowMins >= m
+}
+
+function formatTodoTime(start, end) {
+  if (start && end) return start + ' – ' + end
+  if (start) return start
+  if (end) return '– ' + end
+  return '未定时间'
+}
+
+async function toggleTodoDone(item) {
+  if (!item || todoToggling.value) return
+  const nextDone = !item.done
+  const prevMap = Object.assign({}, todoDoneMap.value)
+  const nextMap = Object.assign({}, prevMap)
+  nextMap[item.key] = nextDone
+  todoDoneMap.value = nextMap
+  todoToggling.value = true
+  try {
+    try {
+      await savePlanTodoDone(nextMap)
+    } catch (err) {
+      if (!(err && err.message === 'NO_PLAN')) throw err
+      await saveTodayPlan(itemsToContent())
+      await savePlanTodoDone(nextMap)
+    }
+  } catch (err) {
+    console.error('更新待办失败', err)
+    todoDoneMap.value = prevMap
+    uni.showToast({ title: '操作失败', icon: 'none' })
+  } finally {
+    todoToggling.value = false
+  }
 }
 
 function openDetail(item) {
@@ -517,6 +653,7 @@ async function loadPlan() {
   try {
     const plan = await getTodayPlan()
     setItemsFromContent(plan ? plan.content : '')
+    todoDoneMap.value = (plan && plan.todoDone) || {}
   } catch (err) {
     console.error('加载计划失败', err)
     uni.showToast({ title: '加载失败，请检查云数据库', icon: 'none' })
@@ -529,7 +666,13 @@ async function handleSave() {
   if (saving.value) return
   saving.value = true
   try {
-    await saveTodayPlan(itemsToContent())
+    const content = itemsToContent()
+    await saveTodayPlan(content)
+    if (content.trim()) {
+      await savePlanTodoDone(todoDoneMap.value)
+    } else {
+      todoDoneMap.value = {}
+    }
     await loadHistory()
     uni.showToast({ title: '已保存', icon: 'success' })
   } catch (err) {
@@ -550,6 +693,7 @@ async function handleClear() {
   saving.value = true
   try {
     setItemsFromContent('')
+    todoDoneMap.value = {}
     await saveTodayPlan('')
     await loadHistory()
     uni.showToast({ title: '已清空', icon: 'success' })
@@ -564,9 +708,6 @@ async function handleClear() {
 /** 背景图：本地 static，上传云后可改回云 fileID */
 onMounted(() => {
   bgSrc.value = '/static/plan-bg.png'
-})
-
-onShow(() => {
   loadPlan()
   loadHistory()
 })
@@ -646,13 +787,6 @@ onShow(() => {
   margin-top: 8rpx;
   font-size: 24rpx;
   color: $color-primary-dark;
-}
-
-.status-tip {
-  text-align: center;
-  padding: 80rpx 0;
-  font-size: 28rpx;
-  color: $color-subtitle;
 }
 
 .edit-area {
@@ -973,6 +1107,69 @@ onShow(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.todo-row {
+  display: flex;
+  align-items: flex-start;
+  margin: 0 24rpx 16rpx;
+  padding: 24rpx 28rpx;
+  border-radius: 20rpx;
+  background: $color-card-soft;
+  border: 1rpx solid rgba(139, 94, 60, 0.08);
+  box-sizing: border-box;
+}
+
+.todo-check {
+  margin-right: 20rpx;
+  margin-top: 4rpx;
+  flex-shrink: 0;
+}
+
+.checkbox {
+  width: 40rpx;
+  height: 40rpx;
+  border: 2rpx solid $color-primary;
+  border-radius: 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.checkbox.checked {
+  background: $color-primary;
+}
+
+.check-mark {
+  color: #fff;
+  font-size: 24rpx;
+  line-height: 1;
+}
+
+.todo-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-time {
+  display: block;
+  font-size: 22rpx;
+  color: $color-primary-dark;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+}
+
+.todo-title {
+  display: block;
+  font-size: 28rpx;
+  color: $color-title;
+  line-height: 1.45;
+}
+
+.todo-title.done {
+  color: $color-subtitle;
+  text-decoration: line-through;
 }
 
 .detail {

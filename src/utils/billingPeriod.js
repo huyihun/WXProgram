@@ -167,6 +167,23 @@ export function listPeriodDays(start, endExclusive) {
   return days
 }
 
+/** 指定「几月」的账期：[该月结算日, 下月结算日) */
+export function getMonthBillingPeriod(year, month) {
+  const y = Number(year)
+  const m = Number(month)
+  const start = resolveSettlementDate(y, m)
+  const nextY = m === 12 ? y + 1 : y
+  const nextM = m === 12 ? 1 : m + 1
+  const end = resolveSettlementDate(nextY, nextM)
+  const endInclusive = addDays(end, -1)
+  return {
+    start,
+    end,
+    endInclusive,
+    label: `${start} ~ ${endInclusive}`,
+  }
+}
+
 /** 自然月区间：[月初, 次月初) */
 export function getCalendarMonthRange(year, month) {
   const y = Number(year)

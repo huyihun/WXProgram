@@ -1,14 +1,10 @@
 /**
- * 首页歌单（微信云存储 fileID）
+ * 音乐歌单与取源（微信云存储 fileID）
  *
- * 真机：完整下载到本地后再播（onCanplay 更可靠）
- * 二次打开：读 USER_DATA_PATH 持久缓存，接近秒开
- * App 启动时 warmMusicCache 可提前下好
- *
- * 上传：控制台云存储 → music/ 目录
- * 本地待上传源文件：assets/music/shengxia_de_guoshi.mp3
+ * VIP：Wi‑Fi 整首落 USER_DATA 持久缓存（上限 300MB，LRU）；蜂窝下临时文件再播
+ * 原生母带歌单见 superPlayerPlaylist.js，由 innerMusic 单独下载
  */
-import { JX_PLAYLIST, MUSIC_MODE_JX } from './jxPlaylist'
+
 import {
   getMusicPrefsState,
   ensureMusicPrefs,
@@ -17,116 +13,27 @@ import {
   saveRemovedLocalOnly,
 } from '@/api/musicPrefs'
 
-export { MUSIC_MODE_JX, JX_PLAYLIST }
+import { SUPER_PLAYER_PLAYLIST } from '@/utils/superPlayerPlaylist'
+import { FLAC_PLAYLIST } from '@/utils/flacPlaylist'
+import { QS_PLAYLIST } from '@/utils/qsPlaylist'
+import { BY_PLAYLIST } from '@/utils/byPlaylist'
+import {
+  MUSIC_MODE_VIP,
+  MUSIC_MODE_FLAC,
+  MUSIC_MODE_QS,
+  MUSIC_MODE_BY,
+  MUSIC_MODE_SUPER_PLAYER,
+  normalizeMusicMode,
+} from '@/utils/musicModes'
 
-/** 默认歌单 */
-export const PLAYLIST = [
-  {
-    id: 'shengxia-de-guoshi',
-    title: '盛夏的果实',
-    artist: '莫文蔚',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/shengxia_de_guoshi.mp3',
-  },
-  {
-    id: 'cmzw',
-    title: '成名在望',
-    artist: '五月天',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/五月天-成名在望.mp3',
-  },
-  {
-    id: 'xpzg',
-    title: '小胖之歌',
-    artist: '小胖',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/怪阿姨+-+放纵.mp3',
-  },
-  {
-    id: 'sdnb',
-    title: '米米米',
-    artist: '米其林',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/黄霄雲+-+山河.mp3',
-  },
-  {
-    id: 'nahan',
-    title: '辣',
-    artist: '辣条',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/张韶涵-呐喊.mp3',
-  },
-  {
-    id: 'qifengle',
-    title: '风萧萧',
-    artist: '易水寒',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/买辣椒也用券 - 起风了.mp3',
-  },
-  {
-    id: 'baige-wuya',
-    title: '心痛2022',
-    artist: '蝙蝠侠',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/艾辰+-+白鸽乌鸦相爱的戏码.mp3',
-  },
-  {
-    id: 'east-of-eden',
-    title: '伊甸园',
-    artist: '佐罗',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/zella day-east of eden.mp3',
-  },
-  {
-    id: 'zella-1965',
-    title: '恩佐费尔南德斯',
-    artist: '恩佐',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/Zella Day - 1965.mp3',
-  },
-  {
-    id: 'that-girl',
-    title: '猪之歌',
-    artist: '猪猪女孩',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/Olly Murs-That Girl.mp3',
-  },
-  {
-    id: 'bu-hui-xinglai',
-    title: '恋曲1987',
-    artist: '梅艳芳',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/My+Stage-不会醒来的梦+(Live)+-+尤长靖、Wiz_H张子豪.mp3',
-  },
-  {
-    id: 'shunqiziran',
-    title: '无所吊谓',
-    artist: '顺其自然',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/exo - 顺其自然.mp3',
-  },
-  {
-    id: 'weixinzhong',
-    title: '不知名歌曲',
-    artist: '不知名歌手',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/五月天-我心中尚未崩坏的地方.mp3',
-  },
-  {
-    id: 'shanzhashu',
-    title: '匡怡',
-    artist: 'ky',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/山楂树之恋.mp3',
-  },
-  {
-    id: 'xzss',
-    title: '恋曲2020',
-    artist: '深井冰',
-    fileID:
-      'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/许嵩-星座书上.mp3',
-  },
-]
+export {
+  MUSIC_MODE_VIP,
+  MUSIC_MODE_SUPER_PLAYER,
+  MUSIC_MODE_FLAC,
+  MUSIC_MODE_QS,
+  MUSIC_MODE_BY,
+}
+
 
 /** VIP 专属歌单（云存储 music/vip/） */
 const VIP_PREFIX =
@@ -367,97 +274,10 @@ export const VIP_PLAYLIST = [
   },
 ]
 
-export const MUSIC_MODE_DEFAULT = 'default'
-export const MUSIC_MODE_VIP = 'vip'
-export const MUSIC_MODE_SUPER = 'super'
-
-/** 超级 VIP：周杰伦歌单（云存储 music/zjl/） */
-export const SUPER_PREFIX =
-  'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/music/zjl/'
-
-export const SUPER_VIP_PLAYLIST = [
-  {
-    id: 'super-hongchenkejian',
-    title: '红尘客栈',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '红尘客栈.mp3',
-  },
-  { id: 'super-mojito', title: 'Mojito', artist: '周杰伦', fileID: SUPER_PREFIX + 'Mojito.mp3' },
-  {
-    id: 'super-yanhuayileng',
-    title: '烟花易冷',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '周杰伦-烟花易冷.mp3',
-  },
-  {
-    id: 'super-taojinxiaozhen',
-    title: '淘金小镇',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '淘金小镇.mp3',
-  },
-  {
-    id: 'super-longzhanqishi',
-    title: '龙战骑士',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '周杰伦-龙战骑士.mp3',
-  },
-  {
-    id: 'super-mingmingjiu',
-    title: '明明就',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '周杰伦-明明就.mp3',
-  },
-  {
-    id: 'super-taiyangzhizi',
-    title: '太阳之子',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '太阳之子.mp3',
-  },
-  {
-    id: 'super-xiangnvduoqing',
-    title: '湘女多情',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '湘女多情.mp3',
-  },
-  {
-    id: 'super-weiliangubao',
-    title: '威廉古堡',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '威廉古堡.mp3',
-  },
-  { id: 'super-waipo', title: '外婆', artist: '周杰伦', fileID: SUPER_PREFIX + '外婆.mp3' },
-
-  { id: 'super-qingtian', title: '晴天', artist: '周杰伦', fileID: SUPER_PREFIX + '晴天.mp3' },
-  { id: 'super-qilixiang', title: '七里香', artist: '周杰伦', fileID: SUPER_PREFIX + '七里香.mp3' },
-  { id: 'super-lantingxu', title: '兰亭序', artist: '周杰伦', fileID: SUPER_PREFIX + '兰亭序.mp3' },
-  { id: 'super-jiekou', title: '借口', artist: '周杰伦', fileID: SUPER_PREFIX + '借口.mp3' },
-  { id: 'super-huasha', title: '画沙', artist: '周杰伦', fileID: SUPER_PREFIX + '画沙.mp3' },
-  { id: 'super-gejian', title: '搁浅', artist: '周杰伦', fileID: SUPER_PREFIX + '搁浅.mp3' },
-  {
-    id: 'super-gaobaiqiqiu',
-    title: '告白气球',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '告白气球.mp3',
-  },
-  { id: 'super-feng', title: '枫', artist: '周杰伦', fileID: SUPER_PREFIX + '枫.mp3' },
-  {
-    id: 'super-fensehaiyang',
-    title: '粉色海洋',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '粉色海洋.mp3',
-  },
-  { id: 'super-caihong', title: '彩虹', artist: '周杰伦', fileID: SUPER_PREFIX + '彩虹.mp3' },
-  {
-    id: 'super-bandaotiehe',
-    title: '半岛铁盒',
-    artist: '周杰伦',
-    fileID: SUPER_PREFIX + '半岛铁盒.mp3',
-  },
-]
 
 function loadPinnedFileIds(mode) {
   const prefs = getMusicPrefsState()
-  const list = prefs.pinned && prefs.pinned[mode || 'default']
+  const list = prefs.pinned && prefs.pinned[mode || 'super_player']
   return list && list.length ? list : []
 }
 
@@ -506,12 +326,21 @@ function applyPinnedOrder(list, mode) {
   return top.concat(rest)
 }
 
-export function getPlaylistByMode(mode) {
-  let list = PLAYLIST
-  if (mode === MUSIC_MODE_SUPER) list = SUPER_VIP_PLAYLIST
-  else if (mode === MUSIC_MODE_VIP) list = VIP_PLAYLIST
-  else if (mode === MUSIC_MODE_JX) list = JX_PLAYLIST
+/** 应用已删过滤 + 置顶排序（超级播放器歌单也可复用） */
+export function withMusicPrefs(list, mode) {
   return applyPinnedOrder(filterRemoved(list), mode)
+}
+
+export function getPlaylistByMode(mode) {
+  const m = normalizeMusicMode(mode)
+  const map = {}
+  map[MUSIC_MODE_VIP] = VIP_PLAYLIST
+  map[MUSIC_MODE_FLAC] = FLAC_PLAYLIST
+  map[MUSIC_MODE_QS] = QS_PLAYLIST
+  map[MUSIC_MODE_BY] = BY_PLAYLIST
+  map[MUSIC_MODE_SUPER_PLAYER] = SUPER_PLAYER_PLAYLIST
+  const list = map[m] || SUPER_PLAYER_PLAYLIST
+  return withMusicPrefs(list, m)
 }
 
 /** 拉取云端偏好（启动时调用） */
@@ -531,7 +360,7 @@ export async function togglePinMusic(mode, fileID) {
   await ensureMusicPrefs()
   const prefs = getMusicPrefsState()
   if (!prefs.pinned) prefs.pinned = {}
-  const key = mode || 'default'
+  const key = mode || MUSIC_MODE_SUPER_PLAYER
   const list = (prefs.pinned[key] || []).slice()
   const at = list.indexOf(fileID)
   if (at >= 0) list.splice(at, 1)
@@ -600,9 +429,17 @@ export async function deleteMusicFile(fileID) {
 const memCache = {}
 const inflight = {}
 
+const MUSIC_CACHE_MAX_BYTES = 300 * 1024 * 1024
+const MUSIC_CACHE_TARGET_RATIO = 0.9
+const MUSIC_CACHE_META_KEY = 'music_cache_meta_v1'
+
+function getUserDataRoot() {
+  return (typeof wx !== 'undefined' && wx.env && wx.env.USER_DATA_PATH) || ''
+}
+
 function getPersistPath(trackId) {
-  const root = (typeof wx !== 'undefined' && wx.env && wx.env.USER_DATA_PATH) || ''
-  if (!root) return ''
+  const root = getUserDataRoot()
+  if (!root || !trackId) return ''
   return root + '/music_' + trackId + '.mp3'
 }
 
@@ -614,6 +451,130 @@ function hasLocalFile(path) {
   } catch (e) {
     return false
   }
+}
+
+function isHttpUrl(src) {
+  return src && (src.indexOf('http://') === 0 || src.indexOf('https://') === 0)
+}
+
+/** 清除某曲的可播地址内存缓存（临时链失效时重拉） */
+export function clearPlaySourceCache(trackId) {
+  if (!trackId) return
+  delete memCache[trackId]
+  inflight[trackId] = null
+}
+
+function readCacheMeta() {
+  try {
+    const raw = uni.getStorageSync(MUSIC_CACHE_META_KEY)
+    if (raw && typeof raw === 'object') return raw
+  } catch (e) {
+    // ignore
+  }
+  return {}
+}
+
+function writeCacheMeta(meta) {
+  try {
+    uni.setStorageSync(MUSIC_CACHE_META_KEY, meta || {})
+  } catch (e) {
+    // ignore
+  }
+}
+
+function touchCacheMeta(trackId) {
+  if (!trackId) return
+  const meta = readCacheMeta()
+  meta[trackId] = Date.now()
+  writeCacheMeta(meta)
+}
+
+function listMusicCacheFiles() {
+  const root = getUserDataRoot()
+  if (!root) return []
+  const fs = uni.getFileSystemManager()
+  let names = []
+  try {
+    names = fs.readdirSync(root) || []
+  } catch (e) {
+    return []
+  }
+  const out = []
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i]
+    if (!name || name.indexOf('music_') !== 0) continue
+    if (name.slice(-4) !== '.mp3') continue
+    const trackId = name.slice(6, -4)
+    const path = root + '/' + name
+    let size = 0
+    try {
+      const info = fs.statSync(path)
+      size = (info && info.size) || 0
+    } catch (e) {
+      continue
+    }
+    out.push({ trackId, path, size })
+  }
+  return out
+}
+
+function unlinkCacheFile(path, trackId) {
+  try {
+    uni.getFileSystemManager().unlinkSync(path)
+  } catch (e) {
+    // ignore
+  }
+  if (trackId && memCache[trackId] === path) {
+    delete memCache[trackId]
+  }
+}
+
+/** 超 300MB 时按 LRU 删最久未访问的本地曲（保护当前/下一首） */
+function enforceMusicCacheLimit(protectIds) {
+  const files = listMusicCacheFiles()
+  if (!files.length) return
+
+  let total = 0
+  for (let i = 0; i < files.length; i++) total += files[i].size || 0
+  if (total <= MUSIC_CACHE_MAX_BYTES) return
+
+  const meta = readCacheMeta()
+  const protect = {}
+  const ids = protectIds || []
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i]) protect[ids[i]] = true
+  }
+
+  files.sort((a, b) => {
+    const ta = meta[a.trackId] || 0
+    const tb = meta[b.trackId] || 0
+    return ta - tb
+  })
+
+  const target = MUSIC_CACHE_MAX_BYTES * MUSIC_CACHE_TARGET_RATIO
+  for (let i = 0; i < files.length; i++) {
+    if (total <= target) break
+    const item = files[i]
+    if (protect[item.trackId]) continue
+    unlinkCacheFile(item.path, item.trackId)
+    total -= item.size || 0
+    if (meta[item.trackId]) delete meta[item.trackId]
+  }
+  writeCacheMeta(meta)
+}
+
+/** 是否当前为 Wi‑Fi（失败时按非 Wi‑Fi，避免误整首下载） */
+export function isWifiNetwork() {
+  return new Promise((resolve) => {
+    try {
+      uni.getNetworkType({
+        success: (res) => resolve(res.networkType === 'wifi'),
+        fail: () => resolve(false),
+      })
+    } catch (e) {
+      resolve(false)
+    }
+  })
 }
 
 /** 云函数换临时 HTTPS */
@@ -669,29 +630,57 @@ function downloadToPath(url, filePath) {
 }
 
 /**
- * 解析可播路径：本地 src 直接返回；云曲目缓存命中或下载落盘
+ * 解析可播路径
+ * @param {object} track
+ * @param {{ protectIds?: string[] }} [options] 落盘后 LRU 时保护的 trackId
  */
-export async function resolvePlaySource(track) {
+export async function resolvePlaySource(track, options) {
   if (!track) return ''
   if (track.src) {
     memCache[track.id] = track.src
     return track.src
   }
   if (!track.fileID) return ''
-  if (memCache[track.id]) return memCache[track.id]
 
   const persistPath = getPersistPath(track.id)
   if (hasLocalFile(persistPath)) {
+    touchCacheMeta(track.id)
     memCache[track.id] = persistPath
     return persistPath
   }
 
+  const cached = memCache[track.id]
+  if (cached) {
+    // 旧版蜂窝流式 HTTPS 不可靠，一律丢弃改走本地下载
+    if (isHttpUrl(cached)) {
+      delete memCache[track.id]
+    } else if (hasLocalFile(cached)) {
+      touchCacheMeta(track.id)
+      return cached
+    } else {
+      delete memCache[track.id]
+    }
+  }
+
   if (inflight[track.id]) return inflight[track.id]
 
+  const protectIds = (options && options.protectIds) || []
+
   inflight[track.id] = (async () => {
+    const wifi = await isWifiNetwork()
     const url = await getPlayUrl(track.fileID)
+    // 蜂窝也下到临时文件再播：BackgroundAudioManager 对云临时 HTTPS 流式常失败
+    if (!wifi) {
+      const tempPath = await downloadToPath(url, '')
+      memCache[track.id] = tempPath
+      return tempPath
+    }
     const path = await downloadToPath(url, persistPath)
     memCache[track.id] = path
+    if (path === persistPath) {
+      touchCacheMeta(track.id)
+      enforceMusicCacheLimit(protectIds.concat([track.id]))
+    }
     return path
   })()
 
@@ -702,20 +691,10 @@ export async function resolvePlaySource(track) {
   }
 }
 
-/** 启动预热：本地曲直接命中，云曲提前下载 */
+/** 启动预热：仅 Wi‑Fi 整首落盘；蜂窝跳过，点播时再下临时文件 */
 export async function warmMusicCache(track) {
   if (!track) return ''
-  return resolvePlaySource(track)
-}
-
-/** 兼容旧调用 */
-export async function getLocalPlayPath(fileID) {
-  const all = PLAYLIST.concat(VIP_PLAYLIST).concat(SUPER_VIP_PLAYLIST)
-  for (let i = 0; i < all.length; i++) {
-    if (all[i].fileID === fileID) {
-      return resolvePlaySource(all[i])
-    }
-  }
-  const url = await getPlayUrl(fileID)
-  return downloadToPath(url, '')
+  const wifi = await isWifiNetwork()
+  if (!wifi) return ''
+  return resolvePlaySource(track, { protectIds: track.id ? [track.id] : [] })
 }

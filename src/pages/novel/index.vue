@@ -4,9 +4,7 @@
       <text class="subtitle">东野圭吾作品集</text>
     </view>
 
-    <view v-if="loading" class="state">
-      <text class="state-text">加载书架中…</text>
-    </view>
+    <PageLoading v-if="loading" text="加载书架中" />
     <view v-else-if="!books.length" class="state">
       <text class="state-text">暂无书籍，请上传 book/dongye/*.json</text>
     </view>
@@ -57,8 +55,7 @@ const loading = ref(true)
 const books = ref([])
 const progressTick = ref(0)
 
-onShow(() => {
-  progressTick.value += 1
+onMounted(() => {
   const cached = getCachedCatalog()
   if (cached) {
     books.value = cached.books || []
@@ -66,6 +63,11 @@ onShow(() => {
     return
   }
   loadCatalog()
+})
+
+// 从阅读页返回时刷新进度角标，不重新拉书架
+onShow(() => {
+  progressTick.value += 1
 })
 
 async function loadCatalog() {

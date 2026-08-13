@@ -3,7 +3,7 @@
     <view class="casual-page" :style="{ height: bodyHeight + 'px' }">
       <view class="editor">
         <view class="toolbar">
-          <text class="action-history" @tap="openPanel">历史 {{ list.length }}</text>
+          <text class="action-history" @tap="openPanel">过往云烟 {{ list.length }}</text>
           <text v-if="editingId" class="action-cancel" @tap="handleCancelEdit">取消</text>
           <view class="toolbar-spacer" />
           <text class="action-save" :class="{ disabled: saving }" @tap="handleSave">
@@ -24,7 +24,6 @@
       </view>
     </view>
 
-    <!-- 历史底部抽屉 -->
     <view
       class="sheet-mask"
       :class="{ show: panelOpen }"
@@ -34,29 +33,49 @@
     <view class="sheet" :class="{ open: panelOpen }" @touchmove.stop>
       <view class="sheet-handle" />
       <view class="panel-header">
-        <text class="panel-title">历史</text>
-        <text class="panel-close" @tap="closePanel">关闭</text>
+        <text class="panel-title">{{ detailItem ? '云烟详情' : '过往云烟' }}</text>
+        <text class="panel-close" @tap="onSheetClose">
+          {{ detailItem ? '返回' : '关闭' }}
+        </text>
       </view>
 
-      <view v-if="loading" class="panel-empty">加载中...</view>
-      <view v-else-if="list.length === 0" class="panel-empty">还没有记录</view>
+      <!-- 详情 -->
+      <view v-if="detailItem" class="detail">
+        <text class="detail-time">{{ formatDateTime(detailItem.createdAt) }}</text>
+        <scroll-view scroll-y class="detail-scroll">
+          <text class="detail-content">{{ detailItem.content || '（空）' }}</text>
+        </scroll-view>
+        <view class="detail-actions">
+          <view class="bar-btn primary grow" hover-class="bar-btn--active" @tap="handleEdit(detailItem)">
+            <text class="bar-btn-text primary-text">写入编辑</text>
+          </view>
+          <view
+            class="bar-btn ghost"
+            hover-class="bar-btn--active"
+            @tap="handleDelete(detailItem)"
+          >
+            <text class="bar-btn-text">删除</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 列表 -->
+      <view v-else-if="loading" class="panel-empty">加载中...</view>
+      <view v-else-if="list.length === 0" class="panel-empty">还没有过往云烟</view>
       <scroll-view v-else scroll-y class="panel-scroll">
         <view
           v-for="item in list"
           :key="item._id"
-          class="note-item"
+          class="note-card"
           :class="{ active: editingId === item._id }"
+          hover-class="note-card--active"
+          @tap="openDetail(item)"
         >
-          <view class="note-time-row">
+          <view class="note-top">
             <text class="note-time">{{ formatDateTime(item.createdAt) }}</text>
+            <text class="note-arrow">›</text>
           </view>
-          <view class="note-detail">
-            <text class="note-content">{{ item.content }}</text>
-            <view class="note-actions">
-              <text class="note-link" @tap="handleEdit(item)">写入编辑</text>
-              <text class="note-link danger" @tap="handleDelete(item)">删除</text>
-            </view>
-          </view>
+          <text class="note-summary">{{ summarize(item.content) }}</text>
         </view>
       </scroll-view>
     </view>
@@ -73,6 +92,7 @@ const loading = ref(false)
 const saving = ref(false)
 const inputFocus = ref(false)
 const panelOpen = ref(false)
+const detailItem = ref(null)
 const bodyHeight = ref(500)
 const inputHeight = ref(400)
 
@@ -82,10 +102,6 @@ const saveLabel = computed(() => {
 })
 
 onMounted(() => {
-  layoutHeights()
-})
-
-onShow(() => {
   layoutHeights()
   loadList()
 })
@@ -111,12 +127,32 @@ function layoutHeights() {
   inputHeight.value = Math.max(200, bodyHeight.value - toolbar - bottomGap)
 }
 
+function summarize(content) {
+  const text = (content || '').trim().replace(/\s+/g, ' ')
+  if (!text) return '（空）'
+  return text.length > 48 ? text.slice(0, 48) + '…' : text
+}
+
 function openPanel() {
+  detailItem.value = null
   panelOpen.value = true
 }
 
 function closePanel() {
   panelOpen.value = false
+  detailItem.value = null
+}
+
+function onSheetClose() {
+  if (detailItem.value) {
+    detailItem.value = null
+    return
+  }
+  closePanel()
+}
+
+function openDetail(item) {
+  detailItem.value = item
 }
 
 async function loadList() {
@@ -185,6 +221,9 @@ async function handleDelete(item) {
   try {
     await removeCasual(item._id)
     if (editingId.value === item._id) handleCancelEdit()
+    if (detailItem.value && detailItem.value._id === item._id) {
+      detailItem.value = null
+    }
     await loadList()
     uni.showToast({ title: '已删除', icon: 'success' })
   } catch (err) {
@@ -255,7 +294,6 @@ async function handleDelete(item) {
   box-shadow: $shadow-card;
 }
 
-/* 遮罩 */
 .sheet-mask {
   position: fixed;
   left: 0;
@@ -266,7 +304,9 @@ async function handleDelete(item) {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.25s ease, visibility 0.25s ease;
+  transition:
+    opacity 0.25s ease,
+    visibility 0.25s ease;
   z-index: 200;
 }
 
@@ -276,13 +316,12 @@ async function handleDelete(item) {
   pointer-events: auto;
 }
 
-/* 底部抽屉 */
 .sheet {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 65vh;
+  height: 68vh;
   display: flex;
   flex-direction: column;
   background: $color-card;
@@ -345,49 +384,134 @@ async function handleDelete(item) {
   box-sizing: border-box;
 }
 
-.note-item {
-  padding: 0 32rpx;
-  border-bottom: 1rpx solid rgba(0, 0, 0, 0.04);
+.note-card {
+  margin: 0 24rpx 16rpx;
+  padding: 24rpx 28rpx;
+  border-radius: 20rpx;
+  background: $color-card-soft;
+  border: 1rpx solid rgba(74, 159, 232, 0.1);
+  box-sizing: border-box;
 }
 
-.note-item.active .note-time {
-  color: $color-primary-dark;
-  font-weight: 600;
+.note-card--active {
+  opacity: 0.9;
 }
 
-.note-time-row {
-  padding: 24rpx 0 8rpx;
+.note-card.active {
+  border-color: rgba(74, 159, 232, 0.35);
+  background: rgba(74, 159, 232, 0.08);
+}
+
+.note-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
 }
 
 .note-time {
   font-size: 24rpx;
+  color: $color-primary-dark;
+  font-weight: 600;
+}
+
+.note-arrow {
+  font-size: 32rpx;
   color: $color-subtitle;
+  line-height: 1;
 }
 
-.note-detail {
-  padding: 0 0 28rpx;
-}
-
-.note-content {
+.note-summary {
   display: block;
   font-size: 28rpx;
-  line-height: 1.7;
+  line-height: 1.55;
   color: $color-title;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8rpx 28rpx 20rpx;
+  box-sizing: border-box;
+}
+
+.detail-time {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: $color-primary-dark;
   margin-bottom: 16rpx;
 }
 
-.note-actions {
+.detail-scroll {
+  flex: 1;
+  height: 0;
+  background: $color-card-soft;
+  border-radius: 18rpx;
+  padding: 24rpx 28rpx;
+  box-sizing: border-box;
+  margin-bottom: 20rpx;
+}
+
+.detail-content {
+  display: block;
+  font-size: 30rpx;
+  line-height: 1.75;
+  color: $color-title;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.detail-actions {
   display: flex;
-  gap: 32rpx;
+  gap: 16rpx;
+  flex-shrink: 0;
 }
 
-.note-link {
-  font-size: 26rpx;
-  color: $color-primary-dark;
+.bar-btn {
+  flex: 1;
+  height: 84rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1rpx solid rgba(74, 159, 232, 0.16);
+  box-sizing: border-box;
 }
 
-.note-link.danger {
-  color: #e74c3c;
+.bar-btn.ghost {
+  flex: 0.7;
+}
+
+.bar-btn.primary {
+  flex: 1.2;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-dark 100%);
+  border-color: transparent;
+  box-shadow: 0 8rpx 20rpx rgba(43, 127, 212, 0.22);
+}
+
+.bar-btn.grow {
+  flex: 1.4;
+}
+
+.bar-btn--active {
+  opacity: 0.88;
+  transform: scale(0.98);
+}
+
+.bar-btn-text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: $color-title;
+}
+
+.bar-btn-text.primary-text {
+  color: #fff;
 }
 </style>
