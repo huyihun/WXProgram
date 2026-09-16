@@ -209,6 +209,7 @@ import {
   getCachedBook,
   getNovelProgress,
   setNovelProgress,
+  normalizeShelf,
 } from '@/api/novel'
 
 const PREFS_KEY = 'novelReaderPrefs'
@@ -240,6 +241,7 @@ const lineHeightOptions = [
 ]
 
 const bookId = ref('')
+const shelf = ref('dongye')
 const meta = ref({ id: '', title: '', author: '', chapterCount: 0 })
 const chapterIndex = ref(1)
 const chapterTitle = ref('')
@@ -354,7 +356,7 @@ const bookPct = computed(() => {
 })
 
 const tocList = computed(() => {
-  const book = getCachedBook(bookId.value)
+  const book = getCachedBook(bookId.value, shelf.value)
   const list = (book && book.chapters) || []
   const out = []
   for (let i = 0; i < list.length; i++) {
@@ -370,12 +372,13 @@ onLoad((query) => {
   syncSystemInfo()
   loadPrefs()
   const q = query || {}
+  shelf.value = normalizeShelf(q.shelf)
   bookId.value = decodeURIComponent(q.bookId || '')
   const ch = Number(q.chapter)
   if (isFinite(ch) && ch >= 1) {
     chapterIndex.value = ch
   } else if (bookId.value) {
-    chapterIndex.value = getNovelProgress(bookId.value)
+    chapterIndex.value = getNovelProgress(bookId.value, shelf.value)
   }
   boot()
 })
@@ -427,7 +430,9 @@ function rpx2px(rpx) {
 function goBack() {
   uni.navigateBack({
     fail: () => {
-      uni.reLaunch({ url: '/pages/novel/index' })
+      uni.reLaunch({
+        url: '/pages/novel/shelf?shelf=' + encodeURIComponent(shelf.value),
+      })
     },
   })
 }
@@ -441,7 +446,7 @@ async function boot() {
   booting.value = true
   loadError.value = ''
   try {
-    const book = await fetchNovelBook(bookId.value)
+    const book = await fetchNovelBook(bookId.value, shelf.value)
     meta.value = {
       id: book.id,
       title: book.title,
@@ -657,7 +662,7 @@ function toPageView(page, chapTitle, chapIndex, pIndex, pCount, endIsBook) {
 }
 
 function applyChapter(index, targetPage, withAnim, dir) {
-  const data = getCachedChapter(bookId.value, index)
+  const data = getCachedChapter(bookId.value, index, shelf.value)
   if (!data) {
     uni.showToast({ title: '章节不存在', icon: 'none' })
     return false
@@ -687,7 +692,7 @@ function applyChapter(index, targetPage, withAnim, dir) {
     chapterContent.value = nextContent
     pages.value = nextPages
     pageIndex.value = p
-    setNovelProgress(bookId.value, chapterIndex.value)
+    setNovelProgress(bookId.value, chapterIndex.value, shelf.value)
   }
 
   if (!withAnim) {

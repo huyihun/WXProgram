@@ -1,14 +1,11 @@
 /**
  * 唯一播放器：BackgroundAudioManager
- * - 原生母带（super_player）：仅 Wi‑Fi，长超时 download → temp → BAM
- * - 其它无损（flac/qs/by）：同样下载再播，不强制 Wi‑Fi
- * - VIP专属（vip）：resolvePlaySource（本地缓存 / 蜂窝 temp）
+ * - 无损 / VIP：resolvePlaySource 落盘 USER_DATA（约 200MB LRU），听过秒开
  * - 当前曲 onPlay 后静默预热下一首；切到预热中的曲复用下载不重来
  * - 切歌 abort 旧下载 + playGeneration 防竞态
  * - 置顶/删除/默认歌单走 music_prefs
  */
 import {
-  getPlayUrl,
   isWifiNetwork,
   withMusicPrefs,
   togglePinMusic,
@@ -17,65 +14,125 @@ import {
   deleteMusicFile,
   resolvePlaySource,
   clearPlaySourceCache,
+  invalidateLocalMusic,
+  abortMusicDownload,
+  clearAllMusicDiskCache,
+  isPlaySourceInflight,
   syncMusicPrefs,
+  trimPlaySourceMemory,
   VIP_PLAYLIST,
 } from '@/utils/playlist'
-import { SUPER_PLAYER_PLAYLIST } from '@/utils/superPlayerPlaylist'
 import { FLAC_PLAYLIST } from '@/utils/flacPlaylist'
 import { QS_PLAYLIST } from '@/utils/qsPlaylist'
 import { BY_PLAYLIST } from '@/utils/byPlaylist'
-import { getDefaultMusicMode, setDefaultMusicMode as saveDefaultMusicMode } from '@/api/musicPrefs'
+import { ZJL_PLAYLIST } from '@/utils/zjlPlaylist'
+import { ZM_PLAYLIST } from '@/utils/zmPlaylist'
+import { XUSONG_PLAYLIST } from '@/utils/xusongPlaylist'
+import { DY_PLAYLIST } from '@/utils/dyPlaylist'
+import { ALIN_PLAYLIST } from '@/utils/alinPlaylist'
+import { GT_PLAYLIST } from '@/utils/gtPlaylist'
+import { BLIND_PLAYLIST } from '@/utils/blindPlaylist'
 import {
-  MUSIC_MODE_SUPER_PLAYER,
+  getDefaultMusicMode,
+  getMusicPrefsState,
+  setDefaultMusicMode as saveDefaultMusicMode,
+} from '@/api/musicPrefs'
+import {
   MUSIC_MODE_VIP,
   MUSIC_MODE_FLAC,
   MUSIC_MODE_QS,
   MUSIC_MODE_BY,
+  MUSIC_MODE_ZJL,
+  MUSIC_MODE_ZM,
+  MUSIC_MODE_XS,
+  MUSIC_MODE_DY,
+  MUSIC_MODE_ALIN,
+  MUSIC_MODE_GT,
+  MUSIC_MODE_BLIND,
   normalizeMusicMode,
   isMasterMusicMode,
   isWifiOnlyMusicMode,
+  isBlindMusicMode,
   getModeMeta,
 } from '@/utils/musicModes'
 
 export {
-  MUSIC_MODE_SUPER_PLAYER,
   MUSIC_MODE_VIP,
   MUSIC_MODE_FLAC,
   MUSIC_MODE_QS,
   MUSIC_MODE_BY,
+  MUSIC_MODE_ZJL,
+  MUSIC_MODE_ZM,
+  MUSIC_MODE_XS,
+  MUSIC_MODE_DY,
+  MUSIC_MODE_ALIN,
+  MUSIC_MODE_GT,
+  MUSIC_MODE_BLIND,
   normalizeMusicMode,
   isMasterMusicMode,
   isWifiOnlyMusicMode,
+  isBlindMusicMode,
   getModeMeta,
   getPlaylistOptions,
 } from '@/utils/musicModes'
 
-/** 母带很大，单次下载给足时间（毫秒） */
-const DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000
-
+/** 0–100；非下载中为 0 */
 const RAW_BY_MODE = {}
-RAW_BY_MODE[MUSIC_MODE_SUPER_PLAYER] = SUPER_PLAYER_PLAYLIST
 RAW_BY_MODE[MUSIC_MODE_VIP] = VIP_PLAYLIST
 RAW_BY_MODE[MUSIC_MODE_FLAC] = FLAC_PLAYLIST
 RAW_BY_MODE[MUSIC_MODE_QS] = QS_PLAYLIST
 RAW_BY_MODE[MUSIC_MODE_BY] = BY_PLAYLIST
+RAW_BY_MODE[MUSIC_MODE_ZJL] = ZJL_PLAYLIST
+RAW_BY_MODE[MUSIC_MODE_XS] = XUSONG_PLAYLIST
+RAW_BY_MODE[MUSIC_MODE_ZM] = ZM_PLAYLIST
+RAW_BY_MODE[MUSIC_MODE_DY] = DY_PLAYLIST
+RAW_BY_MODE[MUSIC_MODE_ALIN] = ALIN_PLAYLIST
+RAW_BY_MODE[MUSIC_MODE_GT] = GT_PLAYLIST
+RAW_BY_MODE[MUSIC_MODE_BLIND] = BLIND_PLAYLIST
 
-let mode = MUSIC_MODE_SUPER_PLAYER
+export const PLAY_MODE_SEQ = 'seq'
+export const PLAY_MODE_SHUFFLE = 'shuffle'
+export const PLAY_MODE_LOOP = 'loop'
+const PLAY_MODE_KEY = 'music_play_mode'
+const VALID_PLAY_MODES = [PLAY_MODE_SEQ, PLAY_MODE_SHUFFLE, PLAY_MODE_LOOP]
+
+function readPlayMode() {
+  try {
+    const v = uni.getStorageSync(PLAY_MODE_KEY)
+    if (VALID_PLAY_MODES.indexOf(v) >= 0) return v
+  } catch (e) {
+    // ignore
+  }
+  return PLAY_MODE_SEQ
+}
+
+function writePlayMode(m) {
+  try {
+    uni.setStorageSync(PLAY_MODE_KEY, m)
+  } catch (e) {
+    // ignore
+  }
+}
+
+let mode = MUSIC_MODE_FLAC
 let index = 0
 let playing = false
 let loading = false
 let ready = false
 let bound = false
 let wantPlay = false
-/** 0–100；非下载中为 0（仅母带） */
 let downloadProgress = 0
 let lastProgressEmitAt = 0
 let lastProgressEmitVal = -1
 let playGeneration = 0
-let downloadTask = null
+let playMode = readPlayMode()
+let shuffleOrder = []
+let shufflePos = 0
 const srcMem = {}
 const listeners = []
-const inflight = {}
+let playErrorRetryId = ''
+let assignedSrc = ''
+let memoryWarnBound = false
 
 function isMasterMode() {
   return isMasterMusicMode(mode)
@@ -94,7 +151,7 @@ function setDownloadProgress(percent) {
   if (next < 100 && next - lastProgressEmitVal < 1 && now - lastProgressEmitAt < 120) return
   lastProgressEmitVal = next
   lastProgressEmitAt = now
-  emit()
+  emit({ includePlaylist: false })
 }
 
 function clearDownloadProgress() {
@@ -132,13 +189,7 @@ function friendlyDownloadError(errMsg) {
 }
 
 function abortDownload() {
-  if (!downloadTask) return
-  try {
-    downloadTask.abort()
-  } catch (e) {
-    // ignore
-  }
-  downloadTask = null
+  abortMusicDownload()
 }
 
 function bumpGeneration() {
@@ -151,108 +202,154 @@ function isStale(gen) {
   return gen !== playGeneration
 }
 
-function downloadHttpsToTemp(url, onProgress) {
-  return new Promise((resolve, reject) => {
-    abortDownload()
-    const task = uni.downloadFile({
-      url,
-      timeout: DOWNLOAD_TIMEOUT_MS,
-      success: (res) => {
-        if (downloadTask === task) downloadTask = null
-        if (res.statusCode !== 200 || !res.tempFilePath) {
-          reject(new Error('下载失败 ' + (res.statusCode || '')))
-          return
-        }
-        resolve(res.tempFilePath)
-      },
-      fail: (err) => {
-        if (downloadTask === task) downloadTask = null
-        const raw = (err && err.errMsg) || ''
-        if (String(raw).indexOf('abort') >= 0) {
-          reject(new Error('abort'))
-          return
-        }
-        reject(new Error(friendlyDownloadError(raw)))
-      },
-    })
-    downloadTask = task
-
-    if (task && typeof task.onProgressUpdate === 'function' && onProgress) {
-      task.onProgressUpdate((p) => {
-        if (downloadTask !== task) return
-        onProgress(p && p.progress != null ? p.progress : 0)
-      })
-    }
-  })
+function shuffleArray(arr) {
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = a[i]
+    a[i] = a[j]
+    a[j] = tmp
+  }
+  return a
 }
 
-async function resolveMasterSource(track, gen, silent) {
+function rebuildShuffle(keepCurrent) {
+  const list = activeList()
+  const n = list.length
+  if (n <= 0) {
+    shuffleOrder = []
+    shufflePos = 0
+    return
+  }
+  const cur = keepCurrent ? index : 0
+  const rest = []
+  for (let i = 0; i < n; i++) {
+    if (i !== cur) rest.push(i)
+  }
+  shuffleOrder = [cur].concat(shuffleArray(rest))
+  shufflePos = 0
+}
+
+/** 盲盒：全量重洗，首曲真正随机（不钉死 index=0） */
+function rebuildBlindShuffleFresh() {
+  const list = activeList()
+  const n = list.length
+  if (n <= 0) {
+    shuffleOrder = []
+    shufflePos = 0
+    index = 0
+    return
+  }
+  const order = []
+  for (let i = 0; i < n; i++) order.push(i)
+  shuffleOrder = shuffleArray(order)
+  shufflePos = 0
+  index = shuffleOrder[0]
+}
+
+function rebuildShuffleAvoidRepeat() {
+  const list = activeList()
+  const n = list.length
+  const prev = index
+  const rest = []
+  for (let i = 0; i < n; i++) {
+    if (i !== prev) rest.push(i)
+  }
+  const shuffled = shuffleArray(rest)
+  shuffleOrder = shuffled.length ? shuffled : [prev]
+  shufflePos = 0
+}
+
+function peekNextIndex() {
+  const list = activeList()
+  const n = list.length
+  if (n <= 0) return -1
+  if (playMode === PLAY_MODE_LOOP) return index
+  if (playMode === PLAY_MODE_SHUFFLE) {
+    if (!shuffleOrder.length) rebuildShuffle(true)
+    if (shuffleOrder.length < 2) return shuffleOrder[0]
+    const nextPos = shufflePos + 1
+    if (nextPos < shuffleOrder.length) return shuffleOrder[nextPos]
+    if (n < 2) return index
+    let pick = Math.floor(Math.random() * n)
+    if (pick === index) pick = (pick + 1) % n
+    return pick
+  }
+  return (index + 1) % n
+}
+
+function peekNextTrack() {
+  if (playMode === PLAY_MODE_LOOP) return null
+  const list = activeList()
+  const i = peekNextIndex()
+  if (i < 0) return null
+  return list[i] || null
+}
+
+function advanceIndex(dir) {
+  const list = activeList()
+  const n = list.length
+  if (!n) return
+  if (playMode === PLAY_MODE_SHUFFLE) {
+    if (!shuffleOrder.length) rebuildShuffle(true)
+    if (dir > 0) {
+      shufflePos += 1
+      if (shufflePos >= shuffleOrder.length) rebuildShuffleAvoidRepeat()
+      index = shuffleOrder[shufflePos]
+    } else {
+      shufflePos -= 1
+      if (shufflePos < 0) shufflePos = shuffleOrder.length - 1
+      index = shuffleOrder[shufflePos]
+    }
+    return
+  }
+  index = (index + dir + n) % n
+}
+
+function protectIdsFor(track) {
+  const ids = []
+  if (track && track.id) ids.push(track.id)
+  const next = peekNextTrack()
+  if (next && next.id && next.id !== (track && track.id)) ids.push(next.id)
+  return ids
+}
+
+async function resolveTrackSource(track, gen, silent) {
   if (!track || !track.fileID) return ''
 
-  if (srcMem[track.id] && hasLocalFile(srcMem[track.id])) {
-    return srcMem[track.id]
+  if (srcMem[track.id]) {
+    if (hasLocalFile(srcMem[track.id])) return srcMem[track.id]
+    delete srcMem[track.id]
   }
 
-  if (inflight[track.id]) {
-    const path = await inflight[track.id]
+  if (isWifiOnlyMode()) {
+    const wifi = await isWifiNetwork()
+    if (!wifi) throw new Error('请连接 Wi‑Fi 后播放')
     if (isStale(gen)) throw new Error('abort')
-    return path
   }
 
-  inflight[track.id] = (async () => {
-    if (isWifiOnlyMode()) {
-      const wifi = await isWifiNetwork()
-      if (!wifi) throw new Error('请连接 Wi‑Fi 后播放')
-      if (isStale(gen)) throw new Error('abort')
-    }
-
-    const url = await getPlayUrl(track.fileID)
-    if (!url) throw new Error('获取播放地址失败')
-    if (isStale(gen)) throw new Error('abort')
-
-    if (!silent) setDownloadProgress(0)
-    const path = await downloadHttpsToTemp(url, silent
+  if (!silent) setDownloadProgress(0)
+  const src = await resolvePlaySource(track, {
+    protectIds: protectIdsFor(track),
+    onProgress: silent
       ? null
       : (percent) => {
           if (isStale(gen)) return
           setDownloadProgress(percent)
-        })
-    if (isStale(gen)) throw new Error('abort')
-
-    if (!silent) setDownloadProgress(100)
-    srcMem[track.id] = path
-    return path
-  })()
-
-  try {
-    return await inflight[track.id]
-  } finally {
-    inflight[track.id] = null
-  }
-}
-
-async function resolveVipSource(track) {
-  if (!track || !track.fileID) return ''
-  if (srcMem[track.id] && hasLocalFile(srcMem[track.id])) {
-    return srcMem[track.id]
-  }
-  const list = activeList()
-  const next = list.length > 1 ? list[(index + 1) % list.length] : null
-  const protectIds = [track.id]
-  if (next && next.id) protectIds.push(next.id)
-  const src = await resolvePlaySource(track, { protectIds: protectIds })
+        },
+  })
+  if (isStale(gen)) throw new Error('abort')
+  if (!silent) setDownloadProgress(100)
   srcMem[track.id] = src
   return src
 }
 
 /** 当前曲开始播放后，静默预热下一首（不打断进度条 UI） */
 function prefetchNextTrack() {
-  const list = activeList()
-  if (list.length < 2) return
-  const next = list[(index + 1) % list.length]
+  const next = peekNextTrack()
   if (!next || !next.fileID) return
   if (srcMem[next.id] && hasLocalFile(srcMem[next.id])) return
-  if (inflight[next.id]) return
+  if (isPlaySourceInflight(next.id)) return
 
   const run = async () => {
     if (isWifiOnlyMode()) {
@@ -261,11 +358,7 @@ function prefetchNextTrack() {
     }
     const gen = playGeneration
     try {
-      if (isMasterMode()) {
-        await resolveMasterSource(next, gen, true)
-      } else {
-        await resolveVipSource(next)
-      }
+      await resolveTrackSource(next, gen, true)
     } catch (e) {
       // 切歌 abort / 网络失败：忽略
     }
@@ -274,14 +367,43 @@ function prefetchNextTrack() {
 }
 
 function rawList() {
-  return RAW_BY_MODE[mode] || SUPER_PLAYER_PLAYLIST
+  return RAW_BY_MODE[mode] || FLAC_PLAYLIST
 }
 
 function activeList() {
   return withMusicPrefs(rawList(), mode)
 }
 
+let lastPlaylist = null
+let lastPlaylistSig = ''
+
+/** 列表签名未变时复用同一引用，避免高频 emit 触发整表 setData 抖动 */
+function playlistSig() {
+  const prefs = getMusicPrefsState()
+  const pinned = (prefs.pinned && prefs.pinned[mode]) || []
+  return [
+    mode,
+    rawList().length,
+    (prefs.removed || []).length,
+    pinned.join(','),
+    (prefs.blindLiked || []).length,
+    (prefs.blindDisliked || []).length,
+  ].join('|')
+}
+
+function currentPlaylist() {
+  const sig = playlistSig()
+  if (lastPlaylist && sig === lastPlaylistSig) return lastPlaylist
+  lastPlaylistSig = sig
+  lastPlaylist = activeList()
+  return lastPlaylist
+}
+
+/** 好听/不好听列表点播时，曲目可能已不在盲盒池内 */
+let forceTrack = null
+
 function currentTrack() {
+  if (forceTrack) return forceTrack
   const list = activeList()
   return list[index] || null
 }
@@ -290,7 +412,7 @@ function emptyTrack() {
   return { id: '', title: '', artist: '', fileID: '' }
 }
 
-function emit() {
+function emit(opts) {
   const track = currentTrack()
   const state = {
     mode,
@@ -299,8 +421,12 @@ function emit() {
     loading,
     ready,
     downloadProgress,
-    playlist: activeList(),
+    playMode,
     track: track || emptyTrack(),
+  }
+  // 下载进度等高频路径不带 playlist，避免大歌单反复拷贝触发内存压力
+  if (!opts || opts.includePlaylist !== false) {
+    state.playlist = currentPlaylist()
   }
   for (let i = 0; i < listeners.length; i++) {
     listeners[i](state)
@@ -327,6 +453,23 @@ function tryPlay() {
   }
 }
 
+/** 同曲恢复只 play 不重赋 src，避免原生层重复加载整曲缓冲积攒内存 */
+function assignSrc(src, force) {
+  const next = src || ''
+  if (!force && next && next === assignedSrc) return
+  assignedSrc = next
+  getMgr().src = next
+}
+
+function stopMgr() {
+  assignedSrc = ''
+  try {
+    getMgr().stop()
+  } catch (e) {
+    // ignore
+  }
+}
+
 function ensureBound() {
   if (bound) return
   bound = true
@@ -346,11 +489,26 @@ function ensureBound() {
     emit()
   })
   bg.onStop(() => {
+    assignedSrc = ''
     playing = false
     ready = false
     emit()
   })
   bg.onEnded(() => {
+    if (playMode === PLAY_MODE_LOOP) {
+      // 播完后 seek/play 常无效且不抛错；须重赋 src 才能再播
+      const track = currentTrack()
+      const cached = track && track.id ? srcMem[track.id] : ''
+      if (cached && hasLocalFile(cached)) {
+        wantPlay = true
+        applyMeta(track)
+        assignSrc(cached, true)
+        tryPlay()
+        return
+      }
+      loadAndPlay(true)
+      return
+    }
     playing = false
     playNextInnerMusic()
   })
@@ -364,6 +522,10 @@ function ensureBound() {
     ready = true
     loading = false
     clearDownloadProgress()
+    const track = currentTrack()
+    if (track && track.id && playErrorRetryId === track.id) {
+      playErrorRetryId = ''
+    }
     emit()
     if (wantPlay) {
       wantPlay = false
@@ -372,6 +534,23 @@ function ensureBound() {
   })
   bg.onError((err) => {
     console.error('播放失败', err)
+    const track = currentTrack()
+    const tid = track && track.id
+    if (tid && playErrorRetryId !== tid) {
+      playErrorRetryId = tid
+      delete srcMem[tid]
+      invalidateLocalMusic(tid, track.fileID)
+      assignedSrc = ''
+      wantPlay = false
+      playing = false
+      loading = true
+      ready = false
+      clearDownloadProgress()
+      emit()
+      loadAndPlay(true)
+      return
+    }
+    playErrorRetryId = ''
     wantPlay = false
     playing = false
     loading = false
@@ -382,6 +561,17 @@ function ensureBound() {
     const tip = friendlyDownloadError(raw)
     if (tip) uni.showToast({ title: tip, icon: 'none' })
   })
+
+  if (!memoryWarnBound) {
+    memoryWarnBound = true
+    try {
+      wx.onMemoryWarning(() => {
+        trimInnerMusicMemory()
+      })
+    } catch (e) {
+      // ignore
+    }
+  }
 }
 
 async function loadAndPlay(autoPlay) {
@@ -391,7 +581,7 @@ async function loadAndPlay(autoPlay) {
 
   // 若下一首正在预热，复用同一下载，避免切歌时 abort 重下
   let gen
-  if (inflight[track.id]) {
+  if (isPlaySourceInflight(track.id)) {
     gen = playGeneration
   } else {
     gen = bumpGeneration()
@@ -416,17 +606,11 @@ async function loadAndPlay(autoPlay) {
   emit()
 
   try {
-    let src = ''
-    if (isMasterMode()) {
-      src = await resolveMasterSource(track, gen, false)
-    } else {
-      src = await resolveVipSource(track)
-    }
+    const src = await resolveTrackSource(track, gen, false)
     if (isStale(gen)) return
 
     applyMeta(track)
-    const bg = getMgr()
-    bg.src = src
+    assignSrc(src, true)
     if (autoPlay) tryPlay()
   } catch (err) {
     if (isStale(gen) || (err && err.message === 'abort')) return
@@ -451,7 +635,8 @@ export function subscribeInnerMusic(fn) {
     loading,
     ready,
     downloadProgress,
-    playlist: activeList(),
+    playMode,
+    playlist: currentPlaylist(),
     track: currentTrack() || emptyTrack(),
   })
   return () => {
@@ -478,7 +663,7 @@ export async function prefetchInnerMusic() {
   loading = true
   emit()
   try {
-    await resolveVipSource(track)
+    await resolveTrackSource(track, playGeneration, true)
     ready = true
     loading = false
     emit()
@@ -511,7 +696,7 @@ export function toggleInnerMusic() {
     loading = true
     emit()
     applyMeta(track)
-    bg.src = cached
+    assignSrc(cached)
     tryPlay()
     return
   }
@@ -520,40 +705,173 @@ export function toggleInnerMusic() {
 }
 
 export async function playPrevInnerMusic() {
+  forceTrack = null
   const list = activeList()
   if (!list.length) return
-  index = (index - 1 + list.length) % list.length
+  advanceIndex(-1)
   ready = false
   emit()
   await loadAndPlay(true)
 }
 
 export async function playNextInnerMusic() {
+  forceTrack = null
   const list = activeList()
   if (!list.length) return
-  index = (index + 1) % list.length
+  advanceIndex(1)
   ready = false
   emit()
   await loadAndPlay(true)
 }
 
 export async function playInnerTrackAt(i) {
+  forceTrack = null
   const list = activeList()
   if (!list.length) return
   let next = Number(i)
   if (!isFinite(next) || next < 0) next = 0
   if (next >= list.length) next = list.length - 1
   index = next
+  if (playMode === PLAY_MODE_SHUFFLE) rebuildShuffle(true)
   ready = false
   emit()
   await loadAndPlay(true)
+}
+
+/** 盲盒好听/不好听列表点播（曲目可已移出抽歌池） */
+export async function playBlindCatalogTrack(trackId) {
+  ensureBound()
+  if (!trackId) return
+  const raw = RAW_BY_MODE[MUSIC_MODE_BLIND] || []
+  let track = null
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] && raw[i].id === trackId) {
+      track = raw[i]
+      break
+    }
+  }
+  if (!track || !track.fileID) return
+
+  if (!isBlindMusicMode(mode)) {
+    bumpGeneration()
+    wantPlay = false
+    playing = false
+    loading = false
+    ready = false
+    clearDownloadProgress()
+    stopMgr()
+    mode = MUSIC_MODE_BLIND
+    playMode = PLAY_MODE_SHUFFLE
+    writePlayMode(playMode)
+    rebuildBlindShuffleFresh()
+  }
+
+  const list = activeList()
+  let at = -1
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] && list[i].id === trackId) {
+      at = i
+      break
+    }
+  }
+  if (at >= 0) {
+    forceTrack = null
+    await playInnerTrackAt(at)
+    return
+  }
+
+  forceTrack = track
+  ready = false
+  emit()
+  await loadAndPlay(true)
+}
+
+/** 评分后刷新盲盒池；若评的是当前曲则自动切下一首随机 */
+export async function refreshAfterBlindRate(ratedId) {
+  ensureBound()
+  if (!isBlindMusicMode(mode)) {
+    emit()
+    return
+  }
+  const cur = currentTrack()
+  const wasCurrent = !!(ratedId && cur && cur.id === ratedId)
+  forceTrack = null
+
+  if (!wasCurrent && cur && cur.id) {
+    const list = activeList()
+    let found = -1
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] && list[i].id === cur.id) {
+        found = i
+        break
+      }
+    }
+    if (found >= 0) {
+      index = found
+      rebuildShuffle(true)
+      emit()
+      return
+    }
+  }
+
+  const list = activeList()
+  if (!list.length) {
+    bumpGeneration()
+    playing = false
+    ready = false
+    loading = false
+    wantPlay = false
+    stopMgr()
+    emit()
+    return
+  }
+  rebuildBlindShuffleFresh()
+  ready = false
+  emit()
+  if (wasCurrent || playing) {
+    await loadAndPlay(true)
+  } else {
+    await prefetchInnerMusic()
+  }
+}
+
+export function getPlayMode() {
+  return playMode
+}
+
+export function cyclePlayMode() {
+  if (isBlindMusicMode(mode)) {
+    if (playMode !== PLAY_MODE_SHUFFLE) {
+      playMode = PLAY_MODE_SHUFFLE
+      writePlayMode(playMode)
+      rebuildShuffle(true)
+      emit()
+      if (playing) prefetchNextTrack()
+    }
+    return playMode
+  }
+  const order = [PLAY_MODE_SEQ, PLAY_MODE_SHUFFLE, PLAY_MODE_LOOP]
+  const at = order.indexOf(playMode)
+  playMode = order[(at + 1) % order.length]
+  writePlayMode(playMode)
+  if (playMode === PLAY_MODE_SHUFFLE) rebuildShuffle(true)
+  emit()
+  if (playing) prefetchNextTrack()
+  return playMode
 }
 
 export async function switchMusicMode(nextMode) {
   ensureBound()
   const normalized = normalizeMusicMode(nextMode)
   if (normalized === mode) {
-    emit()
+    if (isBlindMusicMode(normalized) && playMode !== PLAY_MODE_SHUFFLE) {
+      playMode = PLAY_MODE_SHUFFLE
+      writePlayMode(playMode)
+      rebuildShuffle(true)
+      emit()
+    } else {
+      emit()
+    }
     return mode
   }
 
@@ -563,14 +881,20 @@ export async function switchMusicMode(nextMode) {
   loading = false
   ready = false
   clearDownloadProgress()
-  try {
-    getMgr().stop()
-  } catch (e) {
-    // ignore
-  }
+  stopMgr()
 
   mode = normalized
-  index = 0
+  forceTrack = null
+  if (isBlindMusicMode(mode)) {
+    playMode = PLAY_MODE_SHUFFLE
+    writePlayMode(playMode)
+    rebuildBlindShuffleFresh()
+  } else {
+    index = 0
+    if (playMode === PLAY_MODE_SHUFFLE) {
+      rebuildShuffle(true)
+    }
+  }
   emit()
   await prefetchInnerMusic()
   return mode
@@ -611,12 +935,43 @@ export async function pinInnerTrackAt(i) {
       }
     }
   }
+  if (playMode === PLAY_MODE_SHUFFLE) rebuildShuffle(true)
   emit()
   return pinned
 }
 
 export function isInnerTrackPinned(fileID) {
   return isMusicPinned(mode, fileID)
+}
+
+/** 一键清音乐缓存：停播、清内存路径、删本地 music_* */
+export function clearInnerMusicLocalCache() {
+  ensureBound()
+  bumpGeneration()
+  wantPlay = false
+  playing = false
+  loading = false
+  ready = false
+  clearDownloadProgress()
+  const ids = Object.keys(srcMem)
+  for (let i = 0; i < ids.length; i++) delete srcMem[ids[i]]
+  stopMgr()
+  clearAllMusicDiskCache()
+  emit()
+}
+
+/** 内存告警时释放地址缓存（保留当前曲与下一首，不影响播放） */
+export function trimInnerMusicMemory() {
+  const keep = []
+  const cur = currentTrack()
+  if (cur && cur.id) keep.push(cur.id)
+  const next = peekNextTrack()
+  if (next && next.id) keep.push(next.id)
+  const ids = Object.keys(srcMem)
+  for (let i = 0; i < ids.length; i++) {
+    if (keep.indexOf(ids[i]) < 0) delete srcMem[ids[i]]
+  }
+  trimPlaySourceMemory(keep)
 }
 
 export async function removeInnerTrackAt(i) {
@@ -634,7 +989,7 @@ export async function removeInnerTrackAt(i) {
 
   markMusicRemoved(track.fileID)
   delete srcMem[track.id]
-  clearPlaySourceCache(track.id)
+  invalidateLocalMusic(track.id, track.fileID)
 
   const nextList = activeList()
   if (!nextList.length) {
@@ -644,11 +999,7 @@ export async function removeInnerTrackAt(i) {
     ready = false
     loading = false
     wantPlay = false
-    try {
-      getMgr().stop()
-    } catch (e) {
-      // ignore
-    }
+    stopMgr()
     emit()
   } else if (wasCurrent) {
     if (at >= nextList.length) index = 0
@@ -659,6 +1010,8 @@ export async function removeInnerTrackAt(i) {
     if (at < index) index = index - 1
     emit()
   }
+
+  if (playMode === PLAY_MODE_SHUFFLE && activeList().length) rebuildShuffle(true)
 
   await deleteMusicFile(track.fileID)
 

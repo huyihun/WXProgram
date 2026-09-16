@@ -23,8 +23,8 @@
 </template>
 
 <script setup>
-import { MOOD_OPTIONS, getMoodByDate, upsertMood, getToday } from '@/api/notebook'
-import { applyMoodTheme, MOOD_THEMES } from '@/utils/moodTheme'
+import { MOOD_OPTIONS, getLatestMood, upsertMood, getToday } from '@/api/notebook'
+import { applyMoodTheme, currentMoodKey, ensureMoodThemeBg, MOOD_THEMES } from '@/utils/moodTheme'
 
 const props = defineProps({
   show: {
@@ -42,15 +42,15 @@ const saving = ref(false)
 watch(
   () => props.show,
   (open) => {
-    if (open) loadTodayMood()
+    if (open) loadSelectedMood()
   }
 )
 
-/** 静默加载今日选中态，不展示加载中 */
-async function loadTodayMood() {
+/** 静默加载选中态：今日 → 最近一条 */
+async function loadSelectedMood() {
   try {
-    const todayData = await getMoodByDate(today)
-    selectedKey.value = todayData && todayData.moodKey ? todayData.moodKey : ''
+    const data = await getLatestMood()
+    selectedKey.value = data && data.moodKey ? data.moodKey : ''
   } catch (err) {
     console.error('加载心情失败', err)
   }
@@ -66,10 +66,13 @@ async function handleSelectMood(item) {
   if (saving.value) return
 
   if (selectedKey.value === item.key) {
+    // 同心情重选：补拉一次壁纸（失败过的临时链在这里恢复）
+    ensureMoodThemeBg(true)
     emit('close')
     return
   }
 
+  const prevKey = currentMoodKey.value
   selectedKey.value = item.key
   applyMoodTheme(item.key)
   saving.value = true
@@ -84,7 +87,10 @@ async function handleSelectMood(item) {
     emit('close')
   } catch (err) {
     console.error('保存心情失败', err)
-    uni.showToast({ title: '保存失败', icon: 'none' })
+    // 云端没写成功时回滚主题，避免重启被同步回旧心情
+    applyMoodTheme(prevKey)
+    selectedKey.value = prevKey
+    uni.showToast({ title: '保存失败，主题未更改', icon: 'none' })
   } finally {
     saving.value = false
   }

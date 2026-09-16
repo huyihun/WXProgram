@@ -4,6 +4,7 @@
   "description": "获取音乐云存储临时链接",
   "main": "index.js",
   "dependencies": {
+    "iconv-lite": "^0.7.3",
     "wx-server-sdk": "~2.6.3"
   }
 }

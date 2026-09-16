@@ -2,7 +2,7 @@
  * 减肥云数据库访问层
  *
  * 使用前请在云开发控制台创建集合并设置「仅创建者可读写」：
- * - diet（用 kind 区分：tip / checkin / day / rules / weight / target / current）
+ * - diet（用 kind 区分：tip / checkin / day / rules / weight / target / current / note）
  *
  * 单次 get 最多 20 条是平台硬限制；列表必须 skip 循环拉全，禁止只取一页。
  */
@@ -128,6 +128,11 @@ export async function getDayLog(date = getToday()) {
     .limit(1)
     .get()
   return res.data[0] || null
+}
+
+/** 全部每日饮食+运动记录（日期倒序，分页拉全） */
+export async function getAllDayLogs() {
+  return fetchAllWhere({ kind: 'day' }, 'date', 'desc')
 }
 
 export async function saveDayLog(date, data) {
@@ -325,4 +330,29 @@ export async function removeWeight(id) {
   if (!id) return
   await db.collection(COL).doc(id).remove()
   await syncCurrentFromLatest()
+}
+
+// ─── 减肥心得（多条流水）────────────────────────────────
+
+export async function getAllNotes() {
+  return fetchAllWhere({ kind: 'note' }, 'createdAt', 'desc')
+}
+
+export async function addNote(content) {
+  const text = (content || '').trim()
+  if (!text) throw new Error('请输入心得')
+  const now = Date.now()
+  const res = await db.collection(COL).add({
+    data: {
+      kind: 'note',
+      content: text,
+      createdAt: now,
+    },
+  })
+  return res._id
+}
+
+export async function removeNote(id) {
+  if (!id) return
+  await db.collection(COL).doc(id).remove()
 }

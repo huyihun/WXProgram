@@ -15,7 +15,15 @@
     },
     "usingComponents": true,
     "cloudfunctionRoot": "cloudfunctions/",
-    "requiredBackgroundModes": ["audio"]
+    "requiredBackgroundModes": ["audio"],
+    "permission": {
+      "scope.writePhotosAlbum": {
+        "desc": "用于将壁纸保存到手机相册"
+      },
+      "scope.record": {
+        "desc": "用于语音输入排查问题"
+      }
+    }
   },
   "vueVersion": "3"
 }

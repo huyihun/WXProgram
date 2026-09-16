@@ -1,0 +1,9 @@
+{
+  "name": "zhipuChat",
+  "version": "1.0.0",
+  "description": "智谱对话转发（密钥仅存云函数，Coding Plan 模型 glm-5.3）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

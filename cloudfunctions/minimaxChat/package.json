@@ -1,0 +1,9 @@
+{
+  "name": "minimaxChat",
+  "version": "1.0.0",
+  "description": "MiniMax 对话转发（api.minimaxi.com，模型 MiniMax-M2.7）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

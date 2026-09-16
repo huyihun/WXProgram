@@ -1,55 +1,95 @@
 <template>
-  <PageRoot bottom="48rpx">
+  <PageRoot
+    dark-nav
+    flush
+    fill
+    :extra-style="{ background: 'transparent', backgroundColor: 'transparent' }"
+  >
     <view class="diet-page">
       <PageLoading v-if="bootLoading" />
 
       <template v-else>
-        <!-- 当天体重（最先展示） -->
-        <view class="card">
-          <view class="card-head">
-            <text class="card-title">体重</text>
-            <text class="hist-link" @tap="openWeightHistory">历史记录</text>
+        <!-- 墨金匾额 -->
+        <view class="diet-plaque">
+          <view class="diet-plaque-frame">
+            <view class="diet-plaque-corner tl" />
+            <view class="diet-plaque-corner tr" />
+            <view class="diet-plaque-corner bl" />
+            <view class="diet-plaque-corner br" />
+            <text class="diet-plaque-title">减肥</text>
+            <text class="diet-plaque-hist" @tap="openWeightHistory">历史</text>
           </view>
-          <view class="field-row target-row">
-            <text class="target-label">目标</text>
-            <input
-              class="field-input grow"
-              type="digit"
-              v-model="targetWeight"
-              placeholder="目标体重"
-              :maxlength="6"
-              confirm-type="done"
-              @confirm="handleSaveTarget"
-              @blur="handleSaveTarget"
-            />
-            <text class="unit-text">斤</text>
+        </view>
+
+        <view class="diet-hengpi">
+          <text class="diet-hengpi-text">连续 {{ streak }} 天</text>
+        </view>
+
+        <!-- 印信打卡 -->
+        <view class="check-block">
+          <view
+            class="seal"
+            :class="{ on: checkedToday, busy: checkinBusy }"
+            hover-class="seal--active"
+            @tap="handleCheckin"
+          >
+            <view class="seal-rim" />
+            <view class="seal-face">
+              <view class="seal-inner">
+                <text class="seal-action">{{ checkedToday ? '已打卡' : '打卡' }}</text>
+              </view>
+            </view>
           </view>
-          <view class="field-row current-row">
-            <text class="target-label">当前</text>
-            <text class="current-value">{{ currentWeight || '--' }}</text>
-            <text class="unit-text">斤</text>
+        </view>
+
+        <!-- 体重 -->
+        <view class="weight-block">
+          <view class="metric-row">
+            <view class="metric">
+              <text class="metric-label">目标</text>
+              <input
+                class="metric-input"
+                type="digit"
+                v-model="targetWeight"
+                placeholder="--"
+                :maxlength="6"
+                placeholder-class="ph"
+                confirm-type="done"
+                @confirm="handleSaveTarget"
+                @blur="handleSaveTarget"
+              />
+              <text class="metric-unit">斤</text>
+            </view>
+            <view class="metric">
+              <text class="metric-label">当前</text>
+              <text class="metric-value">{{ currentWeight || '--' }}</text>
+              <text class="metric-unit">斤</text>
+            </view>
           </view>
-          <view class="field-row">
+
+          <view class="record-row">
             <picker mode="time" :value="weightTime" @change="onWeightTimeChange">
-              <view class="field-input time-picker">{{ weightTime || '选择时间' }}</view>
+              <view class="time-chip">{{ weightTime || '时间' }}</view>
             </picker>
             <input
-              class="field-input grow"
+              class="record-input"
               type="digit"
               v-model="weightInput"
               placeholder="体重"
               :maxlength="6"
+              placeholder-class="ph"
             />
-            <text class="unit-text">斤</text>
+            <text class="metric-unit">斤</text>
+            <view
+              class="diet-btn"
+              :class="{ disabled: weightBusy }"
+              hover-class="diet-btn--active"
+              @tap="handleAddWeight"
+            >
+              <text class="diet-btn-text">{{ weightBusy ? '...' : '记录' }}</text>
+            </view>
           </view>
-          <view
-            class="primary-btn"
-            :class="{ disabled: weightBusy }"
-            hover-class="primary-btn--active"
-            @tap="handleAddWeight"
-          >
-            <text class="primary-btn-text">{{ weightBusy ? '保存中...' : '记录体重' }}</text>
-          </view>
+
           <view v-if="todayWeights.length === 0" class="empty-line">今天还没有体重记录</view>
           <view v-else class="weight-list">
             <view v-for="item in todayWeights" :key="item._id" class="weight-row">
@@ -59,96 +99,40 @@
           </view>
         </view>
 
-        <!-- 打卡单独一行（右上）+ 秘诀 -->
-        <view class="tip-block">
-          <view class="check-bar">
-            <text class="streak-hint">连续 {{ streak }} 天</text>
-            <view
-              class="check-btn"
-              :class="{ on: checkedToday, busy: checkinBusy }"
-              hover-class="check-btn--active"
-              @tap="handleCheckin"
-            >
-              <view class="check-ico">
-                <view class="check-ico-ring" />
-                <view class="check-ico-tick" />
+        <!-- 减肥心得 -->
+        <view class="notes-block">
+          <text class="section-title">减肥心得</text>
+
+          <view v-if="notes.length === 0" class="empty-line">还没有心得，写一条吧</view>
+          <view v-else class="note-list">
+            <view v-for="item in notes" :key="item._id" class="note-item">
+              <view class="note-body">
+                <text class="note-content">{{ item.content }}</text>
+                <text class="note-date">{{ formatNoteDate(item.createdAt) }}</text>
               </view>
-              <text class="check-btn-text">{{ checkedToday ? '已打卡' : '打卡' }}</text>
+              <text class="note-del" @tap="handleRemoveNote(item)">删除</text>
             </view>
           </view>
-          <textarea
-            class="tip-input"
-            v-model="tipText"
-            placeholder="秘诀"
-            :maxlength="200"
-            :auto-height="true"
-            :show-confirm-bar="false"
-            @blur="handleSaveTip"
-          />
-        </view>
 
-        <!-- 午餐 / 晚餐 / 喝 -->
-        <view class="card">
-          <view class="field-row">
-            <input class="field-input grow" v-model="dayForm.lunch" placeholder="吃什么" :maxlength="60" />
-            <input class="field-input amount" v-model="dayForm.lunchAmount" placeholder="量" :maxlength="20" />
-          </view>
-          <view class="field-row">
-            <input class="field-input grow" v-model="dayForm.dinner" placeholder="吃什么" :maxlength="60" />
-            <input class="field-input amount" v-model="dayForm.dinnerAmount" placeholder="量" :maxlength="20" />
-          </view>
-          <input class="field-input full" v-model="dayForm.drink" placeholder="喝什么" :maxlength="80" />
-        </view>
-
-        <!-- 只吃 / 不吃（用 input 避免 textarea 固定高度内滚动） -->
-        <view class="card">
-          <input
-            v-model="onlyEat"
-            class="area-input"
-            placeholder="只吃什么"
-            :maxlength="200"
-          />
-          <input
-            v-model="dontEat"
-            class="area-input"
-            placeholder="不吃什么"
-            :maxlength="200"
-          />
-        </view>
-
-        <!-- 运动区：多项 -->
-        <view class="card card--sport">
-          <view v-for="(item, index) in sports" :key="'s-' + index" class="field-row">
+          <view class="note-compose">
             <input
-              class="field-input grow"
-              :value="item.name"
-              placeholder="运动项目"
-              :maxlength="40"
-              @input="onSportName(index, $event)"
+              class="note-input"
+              v-model="noteDraft"
+              placeholder="写一条心得"
+              :maxlength="200"
+              placeholder-class="ph"
+              confirm-type="done"
+              @confirm="handleAddNote"
             />
-            <input
-              class="field-input amount"
-              type="digit"
-              :value="item.minutes"
-              placeholder="时长"
-              :maxlength="4"
-              @input="onSportMinutes(index, $event)"
-            />
-            <text class="unit-text">分钟</text>
-            <text class="sport-del" @tap="removeSport(index)">删</text>
+            <view
+              class="diet-btn primary"
+              :class="{ disabled: noteBusy }"
+              hover-class="diet-btn--active"
+              @tap="handleAddNote"
+            >
+              <text class="diet-btn-text primary-text">{{ noteBusy ? '...' : '添加' }}</text>
+            </view>
           </view>
-          <view class="add-row" hover-class="add-row--active" @tap="addSport">
-            <text class="add-text">+ 添加运动</text>
-          </view>
-        </view>
-
-        <view
-          class="primary-btn"
-          :class="{ disabled: saving }"
-          hover-class="primary-btn--active"
-          @tap="handleSaveAll"
-        >
-          <text class="primary-btn-text">{{ saving ? '保存中...' : '保存' }}</text>
         </view>
       </template>
     </view>
@@ -182,16 +166,10 @@ import { loadOwnerFlag, isOwnerSync } from '@/utils/owner'
 import {
   getToday,
   formatHm,
-  getTip,
-  saveTip,
   getCheckinByDate,
   getAllCheckins,
   calcStreak,
   addCheckin,
-  getDayLog,
-  saveDayLog,
-  getRules,
-  saveRules,
   getWeightsByDate,
   getAllWeights,
   addWeight,
@@ -202,30 +180,17 @@ import {
   getCurrentWeight,
   readCurrentValue,
   syncCurrentFromLatest,
+  getAllNotes,
+  addNote,
+  removeNote,
 } from '@/api/diet'
 
 const bootLoading = ref(true)
 const today = getToday()
 
-const tipText = ref('')
-const tipSaving = ref(false)
-const tipLoaded = ref('')
-
 const checkedToday = ref(false)
 const streak = ref(0)
 const checkinBusy = ref(false)
-
-const dayForm = ref({
-  lunch: '',
-  lunchAmount: '',
-  dinner: '',
-  dinnerAmount: '',
-  drink: '',
-})
-const sports = ref([{ name: '', minutes: '' }])
-const onlyEat = ref('')
-const dontEat = ref('')
-const saving = ref(false)
 
 const weightTime = ref(formatHm())
 const weightInput = ref('')
@@ -235,6 +200,10 @@ const targetWeight = ref('')
 const targetLoaded = ref('')
 const targetSaving = ref(false)
 const currentWeight = ref('')
+
+const notes = ref([])
+const noteDraft = ref('')
+const noteBusy = ref(false)
 
 const historyOpen = ref(false)
 const historyLoading = ref(false)
@@ -252,56 +221,48 @@ onMounted(async () => {
   await loadAll()
 })
 
-function normalizeSports(dayRow) {
-  if (dayRow && dayRow.sports && dayRow.sports.length) {
-    return dayRow.sports.map((it) => ({
-      name: it.name || '',
-      minutes: it.minutes || '',
-    }))
-  }
-  if (dayRow && (dayRow.sport || dayRow.sportMinutes)) {
-    return [{ name: dayRow.sport || '', minutes: dayRow.sportMinutes || '' }]
-  }
-  return [{ name: '', minutes: '' }]
+function pad(n) {
+  return String(n).length < 2 ? '0' + n : String(n)
+}
+
+function formatNoteDate(ts) {
+  const n = Number(ts)
+  if (!n) return ''
+  const d = new Date(n)
+  return (
+    d.getFullYear() +
+    '-' +
+    pad(d.getMonth() + 1) +
+    '-' +
+    pad(d.getDate()) +
+    ' ' +
+    pad(d.getHours()) +
+    ':' +
+    pad(d.getMinutes())
+  )
 }
 
 async function loadAll() {
   bootLoading.value = true
   try {
-    const [tipRow, todayRow, checkins, dayRow, rulesRow, weightRows, targetRow] = await Promise.all([
-      getTip(),
+    const [todayRow, checkins, weightRows, targetRow, noteRows] = await Promise.all([
       getCheckinByDate(today),
       getAllCheckins(),
-      getDayLog(today),
-      getRules(),
       getWeightsByDate(today),
       getTargetWeight(),
+      getAllNotes(),
     ])
-    tipText.value = (tipRow && tipRow.content) || ''
-    tipLoaded.value = tipText.value
     checkedToday.value = !!todayRow
     const dates = []
     for (let i = 0; i < checkins.length; i++) {
       dates.push(checkins[i].date)
     }
     streak.value = calcStreak(dates, today)
-    if (dayRow) {
-      dayForm.value = {
-        lunch: dayRow.lunch || '',
-        lunchAmount: dayRow.lunchAmount || '',
-        dinner: dayRow.dinner || '',
-        dinnerAmount: dayRow.dinnerAmount || '',
-        drink: dayRow.drink || '',
-      }
-    }
-    sports.value = normalizeSports(dayRow)
-    onlyEat.value = (rulesRow && rulesRow.onlyEat) || ''
-    dontEat.value = (rulesRow && rulesRow.dontEat) || ''
     todayWeights.value = weightRows
     const tw = readTargetValue(targetRow)
     targetWeight.value = tw
     targetLoaded.value = tw
-    // 当前体重 = 最近一次记录，并写回 kind:current
+    notes.value = noteRows || []
     try {
       const latest = await syncCurrentFromLatest()
       currentWeight.value = latest ? String(latest.weight) : ''
@@ -370,7 +331,9 @@ async function handleRemoveWeight(item) {
   if (!item || !item._id) return
   try {
     await removeWeight(item._id)
-    todayWeights.value = todayWeights.value.filter((row) => row._id !== item._id)
+    todayWeights.value = todayWeights.value.filter(function (row) {
+      return row._id !== item._id
+    })
     await refreshCurrentWeight()
   } catch (err) {
     console.error('删除体重失败', err)
@@ -396,23 +359,6 @@ function closeWeightHistory() {
   historyOpen.value = false
 }
 
-async function handleSaveTip() {
-  if (tipSaving.value) return
-  const next = (tipText.value || '').trim()
-  if (next === tipLoaded.value) return
-  tipSaving.value = true
-  try {
-    await saveTip(next)
-    tipText.value = next
-    tipLoaded.value = next
-  } catch (err) {
-    console.error('保存秘诀失败', err)
-    uni.showToast({ title: '秘诀保存失败', icon: 'none' })
-  } finally {
-    tipSaving.value = false
-  }
-}
-
 async function handleCheckin() {
   if (checkedToday.value || checkinBusy.value) return
   checkinBusy.value = true
@@ -434,133 +380,367 @@ async function handleCheckin() {
   }
 }
 
-function addSport() {
-  sports.value.push({ name: '', minutes: '' })
-}
-
-function removeSport(index) {
-  if (sports.value.length <= 1) {
-    sports.value = [{ name: '', minutes: '' }]
+async function handleAddNote() {
+  if (noteBusy.value) return
+  const text = (noteDraft.value || '').trim()
+  if (!text) {
+    uni.showToast({ title: '写点什么吧', icon: 'none' })
     return
   }
-  sports.value.splice(index, 1)
-}
-
-function onSportName(index, e) {
-  const item = sports.value[index]
-  if (!item) return
-  item.name = (e && e.detail && e.detail.value) || ''
-}
-
-function onSportMinutes(index, e) {
-  const item = sports.value[index]
-  if (!item) return
-  item.minutes = (e && e.detail && e.detail.value) || ''
-}
-
-async function handleSaveAll() {
-  if (saving.value) return
-  saving.value = true
+  noteBusy.value = true
   try {
-    const tasks = [
-      saveDayLog(today, {
-        lunch: dayForm.value.lunch,
-        lunchAmount: dayForm.value.lunchAmount,
-        dinner: dayForm.value.dinner,
-        dinnerAmount: dayForm.value.dinnerAmount,
-        drink: dayForm.value.drink,
-        sports: sports.value,
-      }),
-      saveRules(onlyEat.value, dontEat.value),
-    ]
-    const tw = (targetWeight.value || '').trim()
-    if (tw && tw !== targetLoaded.value) {
-      tasks.push(
-        saveTargetWeight(tw).then(() => {
-          targetWeight.value = String(Number(tw))
-          targetLoaded.value = targetWeight.value
-        })
-      )
-    }
-    await Promise.all(tasks)
-    uni.showToast({ title: '已保存', icon: 'success' })
+    const id = await addNote(text)
+    notes.value.unshift({
+      _id: id,
+      kind: 'note',
+      content: text,
+      createdAt: Date.now(),
+    })
+    noteDraft.value = ''
+    uni.showToast({ title: '已添加', icon: 'success' })
   } catch (err) {
-    console.error('保存失败', err)
-    uni.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })
+    console.error('添加心得失败', err)
+    uni.showToast({ title: (err && err.message) || '添加失败', icon: 'none' })
   } finally {
-    saving.value = false
+    noteBusy.value = false
+  }
+}
+
+async function handleRemoveNote(item) {
+  if (!item || !item._id) return
+  try {
+    await removeNote(item._id)
+    notes.value = notes.value.filter(function (row) {
+      return row._id !== item._id
+    })
+  } catch (err) {
+    console.error('删除心得失败', err)
+    uni.showToast({ title: '删除失败', icon: 'none' })
   }
 }
 </script>
 
 <style lang="scss" scoped>
 .diet-page {
-  padding-bottom: 24rpx;
+  position: relative;
+  height: 100%;
+  padding: 16rpx 28rpx 80rpx;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
-.card-head {
+.diet-plaque {
+  position: relative;
+  z-index: 2;
+  margin: 0 -8rpx 20rpx;
+}
+
+.diet-plaque-frame {
+  position: relative;
+  min-height: 96rpx;
+  padding: 22rpx 28rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #1a1610 0%, #12100c 55%, #0e0c0a 100%);
+  border: 2rpx solid rgba(180, 140, 70, 0.45);
+  border-radius: 12rpx;
+  box-shadow:
+    inset 0 1rpx 0 rgba(255, 220, 150, 0.12),
+    0 8rpx 24rpx rgba(0, 0, 0, 0.35);
+}
+
+.diet-plaque-corner {
+  position: absolute;
+  width: 16rpx;
+  height: 16rpx;
+  border-color: rgba(220, 180, 90, 0.65);
+  border-style: solid;
+  border-width: 0;
+}
+
+.diet-plaque-corner.tl {
+  left: 8rpx;
+  top: 8rpx;
+  border-top-width: 3rpx;
+  border-left-width: 3rpx;
+}
+
+.diet-plaque-corner.tr {
+  right: 8rpx;
+  top: 8rpx;
+  border-top-width: 3rpx;
+  border-right-width: 3rpx;
+}
+
+.diet-plaque-corner.bl {
+  left: 8rpx;
+  bottom: 8rpx;
+  border-bottom-width: 3rpx;
+  border-left-width: 3rpx;
+}
+
+.diet-plaque-corner.br {
+  right: 8rpx;
+  bottom: 8rpx;
+  border-bottom-width: 3rpx;
+  border-right-width: 3rpx;
+}
+
+.diet-plaque-title {
+  font-size: 40rpx;
+  font-weight: 600;
+  letter-spacing: 28rpx;
+  text-indent: 28rpx;
+  color: #e8c878;
+}
+
+.diet-plaque-hist {
+  position: absolute;
+  right: 28rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 26rpx;
+  color: rgba(220, 190, 130, 0.9);
+  letter-spacing: 4rpx;
+  padding: 8rpx;
+}
+
+.diet-hengpi {
+  position: relative;
+  z-index: 2;
+  margin: 0 auto 28rpx;
+  padding: 14rpx 36rpx;
+  max-width: 420rpx;
+  box-sizing: border-box;
+  text-align: center;
+  background: linear-gradient(180deg, #2a2216 0%, #1a1410 100%);
+  border: 1rpx solid rgba(180, 140, 70, 0.35);
+  border-radius: 8rpx;
+}
+
+.diet-hengpi-text {
+  font-size: 26rpx;
+  letter-spacing: 6rpx;
+  color: #e8c878;
+}
+
+.check-block {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  padding: 8rpx 0 40rpx;
+}
+
+.seal {
+  position: relative;
+  width: 200rpx;
+  height: 200rpx;
+}
+
+.seal.busy {
+  opacity: 0.45;
+}
+
+.seal--active {
+  opacity: 0.88;
+  transform: scale(0.97);
+}
+
+.seal-rim {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #6a5430 0%, #2a2114 42%, #8a6d38 100%);
+  box-shadow: 0 10rpx 28rpx rgba(0, 0, 0, 0.4);
+}
+
+.seal.on .seal-rim {
+  background: linear-gradient(145deg, #d4a84a 0%, #7a5420 40%, #f0d080 100%);
+  box-shadow: 0 0 28rpx rgba(220, 170, 70, 0.35);
+}
+
+.seal-face {
+  position: absolute;
+  left: 14rpx;
+  top: 14rpx;
+  right: 14rpx;
+  bottom: 14rpx;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #5c4528 0%, #2c2114 55%, #1a140c 100%);
+  border: 2rpx solid rgba(220, 180, 90, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.seal.on .seal-face {
+  background: radial-gradient(circle at 35% 28%, #c9963a 0%, #7a4e18 50%, #3a280e 100%);
+  border-color: rgba(255, 220, 140, 0.55);
+}
+
+.seal-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.seal-action {
+  font-size: 28rpx;
+  letter-spacing: 8rpx;
+  text-indent: 8rpx;
+  color: rgba(230, 200, 140, 0.88);
+}
+
+.seal.on .seal-action {
+  color: #fff4d0;
+}
+
+.weight-block,
+.notes-block {
+  position: relative;
+  z-index: 2;
+  padding: 8rpx 4rpx 0;
+}
+
+.weight-block {
+  margin-bottom: 40rpx;
+}
+
+.section-title {
+  display: block;
+  font-size: 24rpx;
+  letter-spacing: 8rpx;
+  color: rgba(220, 190, 130, 0.65);
+  margin-bottom: 12rpx;
+}
+
+.metric-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 20rpx;
+  gap: 24rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid rgba(220, 180, 90, 0.18);
 }
 
-.card-title {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: $color-title;
-}
-
-.hist-link {
-  font-size: 24rpx;
-  font-weight: 600;
-  color: $color-primary-dark;
-  padding: 4rpx 0;
-}
-
-.unit-text {
-  flex-shrink: 0;
-  font-size: 28rpx;
-  color: $color-subtitle;
-  padding: 0 4rpx;
-}
-
-.target-row,
-.current-row {
-  margin-bottom: 16rpx;
-  padding-bottom: 16rpx;
-  border-bottom: 1rpx solid rgba(0, 0, 0, 0.05);
-}
-
-.target-label {
-  flex-shrink: 0;
-  font-size: 28rpx;
-  color: $color-subtitle;
-  width: 72rpx;
-}
-
-.current-value {
+.metric {
   flex: 1;
-  font-size: 30rpx;
-  font-weight: 700;
-  color: $color-title;
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  min-width: 0;
 }
 
-.field-row picker {
+.metric-label {
   flex-shrink: 0;
+  font-size: 24rpx;
+  letter-spacing: 4rpx;
+  color: rgba(220, 190, 130, 0.65);
 }
 
-.time-picker {
-  width: 160rpx;
+.metric-input {
+  width: 96rpx;
+  height: 48rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #f0e6c8;
+  text-align: left;
+  background: transparent;
+}
+
+.metric-value {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #f0e6c8;
+}
+
+.metric-unit {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: rgba(220, 190, 130, 0.55);
+}
+
+.record-row {
   display: flex;
   align-items: center;
-  color: $color-title;
+  gap: 16rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid rgba(220, 180, 90, 0.18);
+}
+
+.time-chip {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #f0e6c8;
+  letter-spacing: 1rpx;
+  padding: 4rpx 0;
+  min-width: 100rpx;
+}
+
+.record-input {
+  width: 100rpx;
+  height: 48rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #f0e6c8;
+  text-align: left;
+  background: transparent;
+}
+
+.ph {
+  color: rgba(180, 160, 120, 0.4);
+}
+
+.diet-btn {
+  margin-left: auto;
+  height: 64rpx;
+  padding: 0 28rpx;
+  border-radius: 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1rpx solid rgba(220, 180, 90, 0.45);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.diet-btn.primary {
+  background: linear-gradient(180deg, #c9a24a 0%, #8a6418 100%);
+  border-color: rgba(232, 200, 120, 0.7);
+  margin-left: 0;
+}
+
+.diet-btn.disabled {
+  opacity: 0.4;
+}
+
+.diet-btn--active {
+  opacity: 0.85;
+}
+
+.diet-btn-text {
+  font-size: 28rpx;
+  letter-spacing: 8rpx;
+  text-indent: 8rpx;
+  color: #e8c878;
+}
+
+.primary-text {
+  color: #fff4d6;
 }
 
 .empty-line {
   font-size: 24rpx;
-  color: $color-subtitle;
-  padding: 8rpx 0;
+  color: rgba(180, 160, 120, 0.5);
+  letter-spacing: 2rpx;
+  padding: 20rpx 0;
 }
 
 .weight-list {
@@ -569,10 +749,10 @@ async function handleSaveAll() {
 
 .weight-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  padding: 16rpx 0;
-  border-bottom: 1rpx solid rgba(0, 0, 0, 0.04);
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid rgba(220, 180, 90, 0.12);
 }
 
 .weight-row:last-child {
@@ -581,222 +761,77 @@ async function handleSaveAll() {
 
 .weight-label {
   font-size: 28rpx;
-  color: $color-title;
-  font-weight: 600;
+  font-weight: 500;
+  color: rgba(245, 230, 190, 0.92);
 }
 
 .weight-del {
   font-size: 24rpx;
-  color: $color-subtitle;
-  padding: 8rpx;
+  color: rgba(200, 140, 120, 0.75);
+  letter-spacing: 2rpx;
+  padding: 8rpx 0;
 }
 
-.tip-block {
-  margin-bottom: 28rpx;
-  padding: 0 4rpx;
+.note-list {
+  margin-bottom: 8rpx;
 }
 
-.check-bar {
+.note-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16rpx;
+  align-items: flex-start;
+  gap: 20rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid rgba(220, 180, 90, 0.12);
 }
 
-.streak-hint {
-  font-size: 22rpx;
-  color: $color-subtitle;
-}
-
-.check-btn {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-  padding: 10rpx 20rpx 10rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(74, 159, 232, 0.12);
-  border: 2rpx solid rgba(74, 159, 232, 0.45);
-}
-
-.check-btn.on {
-  background: linear-gradient(135deg, $color-primary 0%, $color-primary-dark 100%);
-  border-color: $color-primary-dark;
-}
-
-.check-btn.busy {
-  opacity: 0.55;
-}
-
-.check-btn--active {
-  transform: scale(0.96);
-  opacity: 0.9;
-}
-
-.check-ico {
-  position: relative;
-  width: 36rpx;
-  height: 36rpx;
-  flex-shrink: 0;
-}
-
-.check-ico-ring {
-  width: 36rpx;
-  height: 36rpx;
-  border-radius: 50%;
-  border: 3rpx solid $color-primary-dark;
-  box-sizing: border-box;
-  background: #fff;
-}
-
-.check-btn.on .check-ico-ring {
-  border-color: #fff;
-  background: rgba(255, 255, 255, 0.22);
-}
-
-.check-ico-tick {
-  position: absolute;
-  left: 10rpx;
-  top: 8rpx;
-  width: 14rpx;
-  height: 8rpx;
-  border-left: 3rpx solid transparent;
-  border-bottom: 3rpx solid transparent;
-  transform: rotate(-45deg);
-  opacity: 0;
-}
-
-.check-btn.on .check-ico-tick {
-  border-left-color: #fff;
-  border-bottom-color: #fff;
-  opacity: 1;
-}
-
-.check-btn-text {
-  font-size: 26rpx;
-  font-weight: 700;
-  color: $color-primary-dark;
-  letter-spacing: 1rpx;
-}
-
-.check-btn.on .check-btn-text {
-  color: #fff;
-}
-
-.tip-input {
-  width: 100%;
-  min-height: 56rpx;
-  max-height: 120rpx;
-  font-size: 40rpx;
-  font-weight: 700;
-  color: $color-title;
-  line-height: 1.4;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.card {
-  background: $color-card;
-  border-radius: 24rpx;
-  padding: 28rpx;
-  box-shadow: $shadow-card;
-  margin-bottom: 24rpx;
-}
-
-.card--sport {
-  margin-top: 56rpx;
-}
-
-.field-row {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  margin-bottom: 20rpx;
-}
-
-.field-input {
-  height: 72rpx;
-  font-size: 28rpx;
-  color: $color-title;
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 12rpx;
-  padding: 0 16rpx;
-  box-sizing: border-box;
-}
-
-.field-input.grow {
+.note-body {
   flex: 1;
   min-width: 0;
 }
 
-.field-input.amount {
-  width: 140rpx;
-  flex-shrink: 0;
+.note-content {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 500;
+  line-height: 1.65;
+  color: rgba(245, 230, 190, 0.92);
+  letter-spacing: 1rpx;
+  word-break: break-all;
 }
 
-.field-input.full {
-  width: 100%;
-  margin-bottom: 0;
+.note-date {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: rgba(180, 160, 120, 0.55);
+  letter-spacing: 1rpx;
 }
 
-.sport-del {
+.note-del {
   flex-shrink: 0;
   font-size: 24rpx;
-  color: $color-subtitle;
-  padding: 8rpx;
-}
-
-.add-row {
+  color: rgba(200, 140, 120, 0.75);
+  letter-spacing: 2rpx;
   padding: 4rpx 0;
 }
 
-.add-row--active {
-  opacity: 0.7;
-}
-
-.add-text {
-  font-size: 26rpx;
-  color: $color-primary-dark;
-  font-weight: 600;
-}
-
-.area-input {
-  width: 100%;
-  height: 72rpx;
-  box-sizing: border-box;
-  padding: 0 20rpx;
-  margin-bottom: 16rpx;
-  font-size: 28rpx;
-  color: $color-title;
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 16rpx;
-}
-
-.area-input:last-of-type {
-  margin-bottom: 0;
-}
-
-.primary-btn {
+.note-compose {
   display: flex;
   align-items: center;
-  justify-content: center;
-  height: 80rpx;
-  border-radius: 16rpx;
-  background: linear-gradient(135deg, $color-primary 0%, $color-primary-dark 100%);
-  margin-bottom: 8rpx;
+  gap: 16rpx;
+  margin-top: 20rpx;
+  padding-top: 8rpx;
 }
 
-.primary-btn.disabled {
-  opacity: 0.55;
-}
-
-.primary-btn--active {
-  opacity: 0.88;
-}
-
-.primary-btn-text {
+.note-input {
+  flex: 1;
+  height: 64rpx;
+  padding: 0 4rpx;
   font-size: 28rpx;
-  font-weight: 600;
-  color: #fff;
+  font-weight: 500;
+  color: #f0e6c8;
+  border-bottom: 1rpx solid rgba(220, 180, 90, 0.28);
+  box-sizing: border-box;
 }
 
 .sheet-mask {
@@ -805,7 +840,7 @@ async function handleSaveAll() {
   right: 0;
   top: 0;
   bottom: 0;
-  background: rgba(30, 20, 12, 0.4);
+  background: rgba(8, 10, 12, 0.55);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -826,12 +861,12 @@ async function handleSaveAll() {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 68vh;
+  height: 62vh;
   display: flex;
   flex-direction: column;
-  background: $color-card;
+  background: #161c22;
   border-radius: 28rpx 28rpx 0 0;
-  box-shadow: 0 -8rpx 32rpx rgba(107, 68, 35, 0.12);
+  box-shadow: 0 -8rpx 32rpx rgba(0, 0, 0, 0.35);
   transform: translateY(100%);
   transition: transform 0.25s ease;
   z-index: 201;
@@ -849,7 +884,7 @@ async function handleSaveAll() {
   width: 64rpx;
   height: 8rpx;
   border-radius: 8rpx;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(220, 190, 130, 0.22);
   margin: 16rpx auto 0;
   flex-shrink: 0;
 }
@@ -859,19 +894,19 @@ async function handleSaveAll() {
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 32rpx 24rpx;
-  border-bottom: 1rpx solid rgba(0, 0, 0, 0.04);
+  border-bottom: 1rpx solid rgba(220, 190, 130, 0.1);
   flex-shrink: 0;
 }
 
 .panel-title {
   font-size: 30rpx;
   font-weight: 600;
-  color: $color-title;
+  color: rgba(235, 210, 160, 0.92);
 }
 
 .panel-close {
   font-size: 26rpx;
-  color: $color-primary-dark;
+  color: #c9a24f;
   padding: 8rpx;
 }
 
@@ -879,7 +914,7 @@ async function handleSaveAll() {
   padding: 64rpx 24rpx;
   text-align: center;
   font-size: 26rpx;
-  color: $color-subtitle;
+  color: rgba(180, 160, 120, 0.5);
 }
 
 .panel-scroll {
@@ -890,29 +925,27 @@ async function handleSaveAll() {
 }
 
 .hist-item {
+  margin: 0 24rpx 16rpx;
+  padding: 24rpx 28rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1rpx solid rgba(201, 162, 79, 0.12);
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16rpx;
-  margin: 0 24rpx 16rpx;
-  padding: 24rpx 28rpx;
-  border-radius: 20rpx;
-  background: $color-card-soft;
-  border: 1rpx solid rgba(139, 94, 60, 0.08);
 }
 
 .hist-date {
+  font-size: 24rpx;
+  color: rgba(230, 210, 170, 0.85);
   flex-shrink: 0;
-  font-size: 26rpx;
-  color: $color-primary-dark;
-  font-weight: 700;
 }
 
 .hist-detail-line {
-  flex: 1;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #e8c878;
   text-align: right;
-  font-size: 26rpx;
-  color: $color-title;
-  line-height: 1.5;
 }
 </style>

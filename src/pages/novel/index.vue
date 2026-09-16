@@ -1,136 +1,55 @@
 <template>
   <PageRoot>
     <view class="header">
-      <text class="subtitle">东野圭吾作品集</text>
+      <text class="subtitle">选择书架</text>
     </view>
 
-    <PageLoading v-if="loading" text="加载书架中" />
-    <view v-else-if="!books.length" class="state">
-      <text class="state-text">暂无书籍，请上传 book/dongye/*.json</text>
-    </view>
-    <view v-else class="book-grid">
+    <view class="book-grid">
       <view
-        v-for="item in books"
+        v-for="item in shelves"
         :key="item.id"
         class="book-cell"
         hover-class="book-cell--active"
-        @tap="openBook(item)"
+        @tap="openShelf(item)"
       >
         <view class="book-spine-wrap">
-          <view class="book-cover" :class="coverClass(item)" :style="coverStyle(item)">
+          <view class="book-cover" :class="item.pattern" :style="{ background: item.gradient }">
             <view class="cover-spine" />
             <view class="cover-texture" />
-            <text class="cover-glyph">{{ coverGlyph(item) }}</text>
-            <text v-if="progressBadge(item)" class="cover-badge">{{ progressBadge(item) }}</text>
+            <text class="cover-glyph">{{ item.glyph }}</text>
           </view>
         </view>
-        <text class="book-title">{{ item.title }}</text>
-        <text class="book-meta">{{ item.chapterCount || 0 }} 章</text>
+        <text class="book-title">{{ item.name }}</text>
+        <text class="book-meta">{{ item.desc }}</text>
       </view>
     </view>
   </PageRoot>
 </template>
 
 <script setup>
-import { fetchNovelCatalog, getCachedCatalog, getNovelProgress } from '@/api/novel'
-
-const COVER_PALETTES = [
-  ['#1a2744', '#3d5a80'],
-  ['#3d1f1f', '#8b3a3a'],
-  ['#1f3d2f', '#3d7a5c'],
-  ['#3d2a1a', '#a0673a'],
-  ['#2a1a3d', '#6b4a8a'],
-  ['#1a333d', '#3a7a8a'],
-  ['#3d1a2a', '#8a3a5a'],
-  ['#2a2a1a', '#7a6a3a'],
-  ['#1a2a3d', '#4a6a9a'],
-  ['#3d2a2a', '#9a5a4a'],
-  ['#1f2f1a', '#4a6a3a'],
-  ['#2a1f3d', '#5a4a8a'],
+const shelves = [
+  {
+    id: 'dongye',
+    name: '东野',
+    desc: '东野圭吾作品集',
+    glyph: '东野',
+    pattern: 'pat-night',
+    gradient: 'linear-gradient(155deg, #1a2744 0%, #3d5a80 100%)',
+  },
+  {
+    id: 'zhencang',
+    name: '珍藏',
+    desc: '人生加减法 等',
+    glyph: '珍藏',
+    pattern: 'pat-stripe',
+    gradient: 'linear-gradient(155deg, #3d2a1a 0%, #a0673a 100%)',
+  },
 ]
 
-const COVER_PATTERNS = ['pat-stripe', 'pat-dots', 'pat-slash', 'pat-night', 'pat-grid', 'pat-wave']
-
-const loading = ref(true)
-const books = ref([])
-const progressTick = ref(0)
-
-onMounted(() => {
-  const cached = getCachedCatalog()
-  if (cached) {
-    books.value = cached.books || []
-    loading.value = false
-    return
-  }
-  loadCatalog()
-})
-
-// 从阅读页返回时刷新进度角标，不重新拉书架
-onShow(() => {
-  progressTick.value += 1
-})
-
-async function loadCatalog() {
-  loading.value = true
-  try {
-    const data = await fetchNovelCatalog()
-    books.value = data.books || []
-  } catch (err) {
-    console.error('加载书架失败', err)
-    books.value = []
-    const msg = (err && err.message) || ''
-    const tip =
-      msg.indexOf('not exists') >= 0
-        ? '请上传 catalog.json 到 book/dongye'
-        : '书架加载失败'
-    uni.showToast({ title: tip, icon: 'none', duration: 2500 })
-  } finally {
-    loading.value = false
-  }
-}
-
-function hashId(id) {
-  const s = String(id || '')
-  let h = 0
-  for (let i = 0; i < s.length; i++) {
-    h = (h * 31 + s.charCodeAt(i)) | 0
-  }
-  return Math.abs(h)
-}
-
-function coverStyle(item) {
-  const h = hashId(item && item.id)
-  const pal = COVER_PALETTES[h % COVER_PALETTES.length]
-  return {
-    background: 'linear-gradient(155deg, ' + pal[0] + ' 0%, ' + pal[1] + ' 100%)',
-  }
-}
-
-function coverClass(item) {
-  const h = hashId(item && item.id)
-  return COVER_PATTERNS[h % COVER_PATTERNS.length]
-}
-
-function coverGlyph(item) {
-  const title = (item && item.title) || '书'
-  return title.slice(0, 2)
-}
-
-function progressBadge(item) {
-  // 读取 progressTick，从阅读页返回时触发角标刷新
-  const _ = progressTick.value
-  if (!item || !item.id) return ''
-  const p = getNovelProgress(item.id)
-  const total = Number(item.chapterCount) || 0
-  if (!total || p <= 1) return ''
-  return p + '/' + total
-}
-
-function openBook(item) {
+function openShelf(item) {
   if (!item || !item.id) return
-  const chapter = getNovelProgress(item.id)
   uni.navigateTo({
-    url: '/pages/novel/read?bookId=' + encodeURIComponent(item.id) + '&chapter=' + chapter,
+    url: '/pages/novel/shelf?shelf=' + encodeURIComponent(item.id),
   })
 }
 </script>
@@ -147,17 +66,6 @@ function openBook(item) {
   letter-spacing: 2rpx;
 }
 
-.state {
-  padding: 80rpx 24rpx;
-  text-align: center;
-}
-
-.state-text {
-  font-size: 28rpx;
-  color: $color-subtitle;
-  line-height: 1.6;
-}
-
 .book-grid {
   display: flex;
   flex-wrap: wrap;
@@ -166,7 +74,7 @@ function openBook(item) {
 }
 
 .book-cell {
-  width: calc((100% - 40rpx) / 3);
+  width: calc((100% - 20rpx) / 2);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -230,44 +138,12 @@ function openBook(item) {
   );
 }
 
-.pat-dots .cover-texture {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.35) 1.5rpx, transparent 2rpx);
-  background-size: 16rpx 16rpx;
-}
-
-.pat-slash .cover-texture {
-  background: repeating-linear-gradient(
-    45deg,
-    transparent 0,
-    transparent 12rpx,
-    rgba(255, 255, 255, 0.14) 12rpx,
-    rgba(255, 255, 255, 0.14) 16rpx
-  );
-}
-
 .pat-night .cover-texture {
   background-image:
     radial-gradient(rgba(255, 255, 255, 0.7) 1rpx, transparent 2rpx),
     radial-gradient(rgba(255, 255, 255, 0.4) 1rpx, transparent 2rpx);
   background-size: 28rpx 28rpx, 18rpx 22rpx;
   background-position: 4rpx 6rpx, 14rpx 16rpx;
-}
-
-.pat-grid .cover-texture {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.12) 1rpx, transparent 1rpx),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1rpx, transparent 1rpx);
-  background-size: 18rpx 18rpx;
-}
-
-.pat-wave .cover-texture {
-  background: repeating-linear-gradient(
-    0deg,
-    transparent 0,
-    transparent 8rpx,
-    rgba(255, 255, 255, 0.12) 8rpx,
-    rgba(255, 255, 255, 0.12) 10rpx
-  );
 }
 
 .cover-glyph {
@@ -286,35 +162,20 @@ function openBook(item) {
   line-height: 1.2;
 }
 
-.cover-badge {
-  position: absolute;
-  right: 8rpx;
-  bottom: 10rpx;
-  z-index: 4;
-  padding: 4rpx 10rpx;
-  border-radius: 999rpx;
-  font-size: 18rpx;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.45);
-  line-height: 1.2;
-}
-
 .book-title {
   display: block;
   width: 100%;
-  font-size: 24rpx;
+  font-size: 28rpx;
   font-weight: 600;
   color: $color-title;
   text-align: center;
   line-height: 1.35;
-  max-height: 66rpx;
-  overflow: hidden;
   margin-bottom: 4rpx;
 }
 
 .book-meta {
   display: block;
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: $color-subtitle;
   text-align: center;
 }

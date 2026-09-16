@@ -41,6 +41,27 @@ export async function listRatedItems(category) {
   return list
 }
 
+/** 全部分类的评测物品（分页拉全） */
+export async function listAllRatedItems() {
+  const col = db.collection('life_rated_items')
+  const PAGE = 20
+  const list = []
+  let skip = 0
+
+  while (true) {
+    const res = await col.skip(skip).limit(PAGE).get()
+    const batch = res.data || []
+    for (let i = 0; i < batch.length; i++) {
+      list.push(batch[i])
+    }
+    if (batch.length < PAGE) break
+    skip += PAGE
+  }
+
+  list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+  return list
+}
+
 export async function addRatedItem({
   category,
   subtype,

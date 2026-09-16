@@ -1,23 +1,58 @@
 /**
- * 小说：云存储 book/dongye/
+ * 小说：云存储 book/{shelf}/
  * catalog.json + {bookId}.json（一书一文件，含全部章节）
+ * shelf 默认 dongye；珍藏为 zhencang
  */
 import { getPlayUrl } from '@/utils/playlist'
 
-const CLOUD_PREFIX =
-  'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/book/dongye/'
+const CLOUD_ROOT =
+  'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/book/'
 
-/** 整书内存缓存 bookId → book */
-const bookCache = {}
-/** 进行中的整书请求，避免重复下载 */
-const bookInflight = {}
+const DEFAULT_SHELF = 'dongye'
 
-function fileId(relPath) {
-  return CLOUD_PREFIX + relPath
+/** 珍藏书架 fileID（来自 books-dist/zhencang/zc.json 云导出） */
+const ZHENCANG_FILE_IDS = {
+  catalog:
+    'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/book/zhencang/catalog.json',
+  renshengjiajianfa:
+    'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/book/zhencang/renshengjiajianfa.json',
 }
 
-function progressKey(bookId) {
-  return 'novelProgress_' + bookId
+/** shelf → catalog */
+const catalogCacheByShelf = {}
+/** cacheKey → book */
+const bookCache = {}
+/** cacheKey → Promise */
+const bookInflight = {}
+
+export function normalizeShelf(shelf) {
+  const s = String(shelf || '').trim()
+  if (s === 'zhencang') return 'zhencang'
+  return DEFAULT_SHELF
+}
+
+function shelfPrefix(shelf) {
+  return CLOUD_ROOT + normalizeShelf(shelf) + '/'
+}
+
+function fileId(shelf, relPath) {
+  const s = normalizeShelf(shelf)
+  if (s === 'zhencang') {
+    if (relPath === 'catalog.json') return ZHENCANG_FILE_IDS.catalog
+    const bookId = String(relPath || '').replace(/\.json$/i, '')
+    if (ZHENCANG_FILE_IDS[bookId]) return ZHENCANG_FILE_IDS[bookId]
+  }
+  return shelfPrefix(s) + relPath
+}
+
+function bookCacheKey(shelf, bookId) {
+  return normalizeShelf(shelf) + ':' + bookId
+}
+
+function progressKey(shelf, bookId) {
+  const s = normalizeShelf(shelf)
+  if (s === DEFAULT_SHELF) return 'novelProgress_' + bookId
+  return 'novelProgress_' + s + '_' + bookId
 }
 
 /** 小 JSON：云函数直接返回 */
@@ -78,48 +113,51 @@ async function fetchJsonByDownload(fid) {
   }
 }
 
-/** 书架目录缓存 */
-let catalogCache = null
-
 /** 书架目录 */
-export async function fetchNovelCatalog() {
-  if (catalogCache) return catalogCache
-  const data = await fetchJsonByCloud(fileId('catalog.json'))
+export async function fetchNovelCatalog(shelf) {
+  const s = normalizeShelf(shelf)
+  if (catalogCacheByShelf[s]) return catalogCacheByShelf[s]
+  const data = await fetchJsonByCloud(fileId(s, 'catalog.json'))
   const books = (data && data.books) || []
-  catalogCache = {
-    author: (data && data.author) || '东野圭吾',
+  const defaultAuthor = s === 'zhencang' ? '珍藏' : '东野圭吾'
+  catalogCacheByShelf[s] = {
+    author: (data && data.author) || defaultAuthor,
+    title: (data && data.title) || defaultAuthor,
+    shelf: s,
     books,
   }
-  return catalogCache
+  return catalogCacheByShelf[s]
 }
 
-export function getCachedCatalog() {
-  return catalogCache
+export function getCachedCatalog(shelf) {
+  return catalogCacheByShelf[normalizeShelf(shelf)] || null
 }
 
 /** 拉取整书（带内存缓存） */
-export async function fetchNovelBook(bookId) {
+export async function fetchNovelBook(bookId, shelf) {
   if (!bookId) throw new Error('缺少 bookId')
-  if (bookCache[bookId]) return bookCache[bookId]
-  if (bookInflight[bookId]) return bookInflight[bookId]
+  const s = normalizeShelf(shelf)
+  const key = bookCacheKey(s, bookId)
+  if (bookCache[key]) return bookCache[key]
+  if (bookInflight[key]) return bookInflight[key]
 
-  bookInflight[bookId] = (async () => {
-    const data = await fetchJsonByDownload(fileId(bookId + '.json'))
+  bookInflight[key] = (async () => {
+    const data = await fetchJsonByDownload(fileId(s, bookId + '.json'))
     if (!data || !data.id) throw new Error('书籍数据无效')
-    bookCache[bookId] = data
+    bookCache[key] = data
     return data
   })()
 
   try {
-    return await bookInflight[bookId]
+    return await bookInflight[key]
   } finally {
-    bookInflight[bookId] = null
+    bookInflight[key] = null
   }
 }
 
 /** 单书 meta（走整书缓存） */
-export async function fetchNovelMeta(bookId) {
-  const book = await fetchNovelBook(bookId)
+export async function fetchNovelMeta(bookId, shelf) {
+  const book = await fetchNovelBook(bookId, shelf)
   return {
     id: book.id,
     title: book.title,
@@ -195,8 +233,8 @@ function polishChapter(ch) {
 }
 
 /** 单章：从已缓存整书取，不再请求单章文件 */
-export async function fetchNovelChapter(bookId, index) {
-  const book = await fetchNovelBook(bookId)
+export async function fetchNovelChapter(bookId, index, shelf) {
+  const book = await fetchNovelBook(bookId, shelf)
   const list = book.chapters || []
   const n = Number(index) || 1
   for (let i = 0; i < list.length; i++) {
@@ -207,8 +245,8 @@ export async function fetchNovelChapter(bookId, index) {
 }
 
 /** 同步取章（整书已在缓存时用，切章零请求） */
-export function getCachedChapter(bookId, index) {
-  const book = bookCache[bookId]
+export function getCachedChapter(bookId, index, shelf) {
+  const book = bookCache[bookCacheKey(shelf, bookId)]
   if (!book) return null
   const list = book.chapters || []
   const n = Number(index) || 1
@@ -219,13 +257,13 @@ export function getCachedChapter(bookId, index) {
   return null
 }
 
-export function getCachedBook(bookId) {
-  return bookCache[bookId] || null
+export function getCachedBook(bookId, shelf) {
+  return bookCache[bookCacheKey(shelf, bookId)] || null
 }
 
-export function getNovelProgress(bookId) {
+export function getNovelProgress(bookId, shelf) {
   try {
-    const raw = uni.getStorageSync(progressKey(bookId))
+    const raw = uni.getStorageSync(progressKey(shelf, bookId))
     const n = Number(raw)
     return isFinite(n) && n >= 1 ? n : 1
   } catch (e) {
@@ -233,14 +271,18 @@ export function getNovelProgress(bookId) {
   }
 }
 
-export function setNovelProgress(bookId, chapterIndex) {
+export function setNovelProgress(bookId, chapterIndex, shelf) {
   const n = Number(chapterIndex)
   if (!bookId || !isFinite(n) || n < 1) return
   try {
-    uni.setStorageSync(progressKey(bookId), n)
+    uni.setStorageSync(progressKey(shelf, bookId), n)
   } catch (e) {
     // ignore
   }
 }
 
-export { CLOUD_PREFIX }
+export function shelfCloudPrefix(shelf) {
+  return shelfPrefix(shelf)
+}
+
+export const CLOUD_PREFIX = shelfPrefix(DEFAULT_SHELF)

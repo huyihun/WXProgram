@@ -1,5 +1,5 @@
 <script setup>
-import { restoreMoodTheme, applyMoodTheme } from '@/utils/moodTheme'
+import { restoreMoodTheme, applyMoodTheme, currentMoodKey } from '@/utils/moodTheme'
 import { loadOwnerFlag } from '@/utils/owner'
 
 //云开发环境ID cloudbase-d7g0orq1z360a029f
@@ -17,6 +17,7 @@ function pickExport(mod, name) {
 }
 
 onLaunch(() => {
+  // 先恢复本地色板（不依赖云、不拉壁纸）
   restoreMoodTheme()
 
   if (!wx.cloud) {
@@ -29,11 +30,12 @@ onLaunch(() => {
     traceUser: true,
   })
 
-  // 稍晚再调 login，避免 init 后立刻 callFunction 不稳定
+  // 稍晚再拉壁纸 / 同步心情 / login，避免 init 后立刻 callFunction 不稳定
   setTimeout(() => {
+    applyMoodTheme(currentMoodKey.value)
+    syncLatestMoodTheme()
     loadOwnerIdentity()
   }, 300)
-  syncTodayMoodTheme()
   warmMusic()
 })
 
@@ -46,26 +48,18 @@ async function loadOwnerIdentity() {
   }
 }
 
-async function syncTodayMoodTheme() {
+async function syncLatestMoodTheme() {
   try {
     const mod = await import('@/api/notebook')
-    const getMoodByDate = pickExport(mod, 'getMoodByDate')
-    if (!getMoodByDate) return
+    const getLatestMood = pickExport(mod, 'getLatestMood')
+    if (!getLatestMood) return
 
-    const now = new Date()
-    const today =
-      now.getFullYear() +
-      '-' +
-      String(now.getMonth() + 1).padStart(2, '0') +
-      '-' +
-      String(now.getDate()).padStart(2, '0')
-
-    const data = await getMoodByDate(today)
-    if (data && data.moodKey) {
+    const data = await getLatestMood()
+    if (data && data.moodKey && data.moodKey !== currentMoodKey.value) {
       applyMoodTheme(data.moodKey)
     }
   } catch (err) {
-    console.error('同步今日心情主题失败', err)
+    console.error('同步心情主题失败', err)
   }
 }
 

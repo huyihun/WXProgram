@@ -2,11 +2,10 @@
   <PageRoot
     dark-nav
     flush
-    :extra-style="{ backgroundColor: '#0c1014' }"
+    fill
+    :extra-style="{ background: 'transparent', backgroundColor: 'transparent' }"
   >
     <view class="hs-page">
-      <view class="hs-glow hs-glow--a" />
-      <view class="hs-glow hs-glow--b" />
       <view class="hs-ring" :class="{ awaken: sealAwaken }" />
 
       <PageLoading v-if="bootLoading" />
@@ -51,7 +50,7 @@
               :class="{
                 on: running,
                 pressed: btnPressed,
-                busy: btnBusy,
+                busy: sealBusy,
                 awaken: sealAwaken,
               }"
               @touchstart="btnPressed = true"
@@ -86,6 +85,67 @@
           <text class="hs-hint">{{ hintText }}</text>
           <text class="hs-ritual" :class="{ show: ritualTipShow }">印信已启</text>
         </view>
+
+        <!-- 专攻（紧凑） -->
+        <view class="hs-focus">
+          <view class="hs-focus-head">
+            <text class="hs-focus-title">专攻</text>
+            <text class="hs-focus-hist" @tap="openFocusHistory">记录</text>
+          </view>
+
+          <view class="hs-focus-input-wrap">
+            <textarea
+              class="hs-focus-input"
+              v-model="focusContent"
+              placeholder="写下你要专攻的事"
+              placeholder-class="hs-focus-ph"
+              :maxlength="500"
+              :auto-height="true"
+              :show-confirm-bar="false"
+              @input="onFocusContentInput"
+            />
+          </view>
+
+          <view class="hs-focus-range">
+            <view class="hs-focus-range-row">
+              <text class="hs-focus-tag">开始</text>
+              <picker mode="date" :value="startDate" @change="onStartDate">
+                <view class="hs-focus-pick">{{ displayDate(startDate) }}</view>
+              </picker>
+              <picker mode="time" :value="startTime" @change="onStartTime">
+                <view class="hs-focus-pick">{{ startTime || '时间' }}</view>
+              </picker>
+              <text class="hs-focus-sep">·</text>
+              <text class="hs-focus-tag">结束</text>
+              <picker mode="date" :value="endDate" @change="onEndDate">
+                <view class="hs-focus-pick">{{ displayDate(endDate) }}</view>
+              </picker>
+              <picker mode="time" :value="endTime" @change="onEndTime">
+                <view class="hs-focus-pick">{{ endTime || '时间' }}</view>
+              </picker>
+            </view>
+            <text class="hs-focus-sum">{{ rangeText }} · {{ phaseText }}</text>
+          </view>
+
+          <view class="hs-focus-actions">
+            <view
+              class="hs-focus-btn"
+              :class="{ busy: focusBusy }"
+              hover-class="hs-focus-btn--active"
+              @tap="handleFocusSave"
+            >
+              <text class="hs-focus-btn-text">{{ focusSaveLabel }}</text>
+            </view>
+            <view
+              class="hs-focus-btn primary"
+              :class="{ busy: focusBusy, disabled: !focusId }"
+              hover-class="hs-focus-btn--active"
+              @tap="handleFocusComplete"
+            >
+              <text class="hs-focus-btn-text primary">完成</text>
+            </view>
+          </view>
+        </view>
       </template>
 
       <!-- 开启倒计时仪式层 -->
@@ -96,6 +156,7 @@
       </view>
     </view>
 
+    <!-- 胡神会话历史 -->
     <view
       class="sheet-mask"
       :class="{ show: historyOpen }"
@@ -117,6 +178,33 @@
         </view>
       </scroll-view>
     </view>
+
+    <!-- 专攻完成记录 -->
+    <view
+      class="sheet-mask"
+      :class="{ show: focusHistoryOpen }"
+      @tap="closeFocusHistory"
+      @touchmove.stop.prevent
+    />
+    <view class="sheet" :class="{ open: focusHistoryOpen }" @touchmove.stop>
+      <view class="sheet-handle" />
+      <view class="panel-header">
+        <text class="panel-title">专攻记录</text>
+        <text class="panel-close" @tap="closeFocusHistory">关闭</text>
+      </view>
+      <view v-if="focusHistoryLoading" class="panel-empty">加载中...</view>
+      <view v-else-if="focusHistoryList.length === 0" class="panel-empty">还没有记录</view>
+      <scroll-view v-else scroll-y class="panel-scroll">
+        <view v-for="item in focusHistoryList" :key="item._id" class="focus-hist-item">
+          <text class="focus-hist-content">{{ item.content || '-' }}</text>
+          <text class="focus-hist-range">{{ formatFocusRange(item.startAt, item.endAt) }}</text>
+          <view class="focus-hist-foot">
+            <text class="focus-hist-done">完成于 {{ formatCompletedAt(item.completedAt) }}</text>
+            <text class="focus-hist-del" @tap.stop="handleFocusDelete(item)">删除</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
   </PageRoot>
 </template>
 
@@ -130,13 +218,24 @@ import {
   endSession,
   getHistorySessions,
 } from '@/api/hushen'
+import {
+  combineDateTime,
+  splitDateTime,
+  formatFocusRange,
+  formatCompletedAt,
+  getActiveFocus,
+  saveActiveFocus,
+  completeActiveFocus,
+  getHistoryFocus,
+  removeHistoryFocus,
+} from '@/api/zhuanggong'
 
 const bootLoading = ref(true)
 const running = ref(false)
 const sessionId = ref('')
 const startedAt = ref(0)
 const elapsedMs = ref(0)
-const btnBusy = ref(false)
+const sealBusy = ref(false)
 const btnPressed = ref(false)
 let tickTimer = null
 
@@ -153,6 +252,26 @@ const ritualTipShow = ref(false)
 const historyOpen = ref(false)
 const historyLoading = ref(false)
 const historyList = ref([])
+
+const focusId = ref('')
+const focusContent = ref('')
+const startDate = ref('')
+const startTime = ref('')
+const endDate = ref('')
+const endTime = ref('')
+const focusBusy = ref(false)
+const focusReady = ref(false)
+const nowMs = ref(Date.now())
+let nowTimer = null
+let autoSaveTimer = null
+let lastSavedContent = ''
+let lastSavedStart = 0
+let lastSavedEnd = 0
+let persistLock = false
+
+const focusHistoryOpen = ref(false)
+const focusHistoryLoading = ref(false)
+const focusHistoryList = ref([])
 
 const leftCouplet = ['专', '注', '无', '畏', '总', '要', '成', '功']
 const rightCouplet = ['积', '极', '乐', '观', '游', '刃', '有', '余']
@@ -175,6 +294,34 @@ const hintText = computed(() => {
   return running.value ? '点按印信结束本次胡神' : '点按印信开启胡神模式'
 })
 
+const startAtVal = computed(() => {
+  return combineDateTime(startDate.value, startTime.value)
+})
+
+const endAtVal = computed(() => {
+  return combineDateTime(endDate.value, endTime.value)
+})
+
+const rangeText = computed(() => {
+  if (!startAtVal.value || !endAtVal.value) return '设定起止时间'
+  return formatFocusRange(startAtVal.value, endAtVal.value)
+})
+
+const phaseText = computed(() => {
+  const start = floorToMinute(startAtVal.value)
+  const end = floorToMinute(endAtVal.value)
+  const now = floorToMinute(nowMs.value)
+  if (!start || !end) return '未设定'
+  if (now < start) return '未到开始'
+  if (now > end) return '已过结束'
+  return '专攻中'
+})
+
+const focusSaveLabel = computed(() => {
+  if (focusBusy.value) return '…'
+  return focusId.value ? '保存' : '记下'
+})
+
 onMounted(async () => {
   await loadOwnerFlag()
   if (!isOwnerSync()) {
@@ -185,14 +332,286 @@ onMounted(async () => {
     return
   }
   await restoreSession()
+  await loadActiveFocusForm()
+  nowMs.value = Date.now()
+  nowTimer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
   bootLoading.value = false
+  focusReady.value = true
 })
 
 onUnmounted(() => {
   stopTick()
   clearCountdown()
   clearAwaken()
+  if (nowTimer) {
+    clearInterval(nowTimer)
+    nowTimer = null
+  }
+  clearAutoSave()
 })
+
+function floorToMinute(ms) {
+  const n = Number(ms)
+  if (!isFinite(n) || n <= 0) return 0
+  return Math.floor(n / 60000) * 60000
+}
+
+function displayDate(dateStr) {
+  if (!dateStr) return '日期'
+  const p = String(dateStr).split('-')
+  if (p.length < 3) return dateStr
+  return Number(p[1]) + '月' + Number(p[2]) + '日'
+}
+
+function rememberSaved(text, startAt, endAt) {
+  lastSavedContent = text
+  lastSavedStart = startAt
+  lastSavedEnd = endAt
+}
+
+function isDirty() {
+  return (
+    (focusContent.value || '').trim() !== lastSavedContent ||
+    startAtVal.value !== lastSavedStart ||
+    endAtVal.value !== lastSavedEnd
+  )
+}
+
+function applyDefaults() {
+  const start = splitDateTime(floorToMinute(Date.now()))
+  const end = splitDateTime(floorToMinute(Date.now()) + 2 * 60 * 60 * 1000)
+  startDate.value = start.date
+  startTime.value = start.time
+  endDate.value = end.date
+  endTime.value = end.time
+}
+
+function clearFocusForm() {
+  focusId.value = ''
+  focusContent.value = ''
+  applyDefaults()
+  nowMs.value = Date.now()
+  rememberSaved('', startAtVal.value, endAtVal.value)
+}
+
+function validateFocusForm() {
+  const text = (focusContent.value || '').trim()
+  if (!text) {
+    uni.showToast({ title: '请填写专攻内容', icon: 'none' })
+    return false
+  }
+  if (!startAtVal.value || !endAtVal.value) {
+    uni.showToast({ title: '请设定起止时间', icon: 'none' })
+    return false
+  }
+  if (endAtVal.value < startAtVal.value) {
+    uni.showToast({ title: '结束需晚于开始', icon: 'none' })
+    return false
+  }
+  return true
+}
+
+function clearAutoSave() {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer)
+    autoSaveTimer = null
+  }
+}
+
+function scheduleAutoSave() {
+  if (!focusReady.value || !focusId.value || focusBusy.value) return
+  clearAutoSave()
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = null
+    persistFocus(false)
+  }, 800)
+}
+
+async function loadActiveFocusForm() {
+  applyDefaults()
+  try {
+    const row = await getActiveFocus()
+    if (row) {
+      focusId.value = row._id || ''
+      focusContent.value = row.content || ''
+      const startMs = Number(row.startAt) || 0
+      const endMs = Number(row.endAt) || 0
+      const s = splitDateTime(startMs)
+      const e = splitDateTime(endMs)
+      startDate.value = s.date
+      startTime.value = s.time
+      endDate.value = e.date
+      endTime.value = e.time
+      rememberSaved((row.content || '').trim(), startMs, endMs)
+    } else {
+      rememberSaved('', startAtVal.value, endAtVal.value)
+    }
+  } catch (err) {
+    console.error('加载专攻失败', err)
+    uni.showToast({ title: '专攻加载失败', icon: 'none' })
+  }
+}
+
+function onFocusContentInput() {
+  scheduleAutoSave()
+}
+
+function onStartDate(e) {
+  startDate.value = (e && e.detail && e.detail.value) || startDate.value
+  nowMs.value = Date.now()
+  scheduleAutoSave()
+}
+
+function onStartTime(e) {
+  startTime.value = (e && e.detail && e.detail.value) || startTime.value
+  nowMs.value = Date.now()
+  scheduleAutoSave()
+}
+
+function onEndDate(e) {
+  endDate.value = (e && e.detail && e.detail.value) || endDate.value
+  nowMs.value = Date.now()
+  scheduleAutoSave()
+}
+
+function onEndTime(e) {
+  endTime.value = (e && e.detail && e.detail.value) || endTime.value
+  nowMs.value = Date.now()
+  scheduleAutoSave()
+}
+
+async function persistFocus(showOk) {
+  if (persistLock || focusBusy.value) return false
+  const text = (focusContent.value || '').trim()
+  const startAt = startAtVal.value
+  const endAt = endAtVal.value
+  if (!showOk) {
+    if (!text || !startAt || !endAt || endAt < startAt) return false
+  } else if (!validateFocusForm()) {
+    return false
+  }
+  if (focusId.value && !isDirty()) {
+    if (showOk) uni.showToast({ title: '已保存', icon: 'none' })
+    return true
+  }
+
+  persistLock = true
+  if (showOk) focusBusy.value = true
+  try {
+    const row = await saveActiveFocus({
+      content: text,
+      startAt,
+      endAt,
+    })
+    focusId.value = row._id
+    focusContent.value = row.content
+    rememberSaved(row.content, row.startAt, row.endAt)
+    if (showOk) uni.showToast({ title: '已保存', icon: 'none' })
+    return true
+  } catch (err) {
+    console.error('保存专攻失败', err)
+    uni.showToast({ title: (err && err.message) || '保存失败', icon: 'none' })
+    return false
+  } finally {
+    persistLock = false
+    if (showOk) focusBusy.value = false
+  }
+}
+
+function handleFocusSave() {
+  if (focusBusy.value) return
+  clearAutoSave()
+  persistFocus(true)
+}
+
+function handleFocusComplete() {
+  if (focusBusy.value || persistLock) return
+  if (!focusId.value) {
+    uni.showToast({ title: '请先记下这次专攻', icon: 'none' })
+    return
+  }
+  if (!validateFocusForm()) return
+
+  uni.showModal({
+    title: '完成专攻',
+    content: '确认这件事已经完成？完成后将写入记录并清空当前专攻。',
+    success: (res) => {
+      if (res && res.confirm) doFocusComplete()
+    },
+  })
+}
+
+async function doFocusComplete() {
+  if (focusBusy.value || persistLock) return
+  if (!validateFocusForm()) return
+  clearAutoSave()
+  persistLock = true
+  focusBusy.value = true
+  try {
+    const row = await saveActiveFocus({
+      content: (focusContent.value || '').trim(),
+      startAt: startAtVal.value,
+      endAt: endAtVal.value,
+    })
+    focusId.value = row._id
+    await completeActiveFocus(focusId.value)
+    clearFocusForm()
+    uni.showToast({ title: '已记下', icon: 'none' })
+  } catch (err) {
+    console.error('完成专攻失败', err)
+    uni.showToast({ title: (err && err.message) || '完成失败', icon: 'none' })
+  } finally {
+    persistLock = false
+    focusBusy.value = false
+  }
+}
+
+async function openFocusHistory() {
+  if (counting.value) return
+  focusHistoryOpen.value = true
+  focusHistoryLoading.value = true
+  try {
+    focusHistoryList.value = await getHistoryFocus()
+  } catch (err) {
+    console.error('加载专攻历史失败', err)
+    focusHistoryList.value = []
+    uni.showToast({ title: '历史加载失败', icon: 'none' })
+  } finally {
+    focusHistoryLoading.value = false
+  }
+}
+
+function closeFocusHistory() {
+  focusHistoryOpen.value = false
+}
+
+function handleFocusDelete(item) {
+  if (!item || !item._id) return
+  uni.showModal({
+    title: '删除记录',
+    content: '确定删除这一条专攻记录吗？',
+    success: (res) => {
+      if (res && res.confirm) doFocusDelete(item._id)
+    },
+  })
+}
+
+async function doFocusDelete(id) {
+  try {
+    await removeHistoryFocus(id)
+    const next = []
+    for (let i = 0; i < focusHistoryList.value.length; i++) {
+      if (focusHistoryList.value[i]._id !== id) next.push(focusHistoryList.value[i])
+    }
+    focusHistoryList.value = next
+    uni.showToast({ title: '已删除', icon: 'none' })
+  } catch (err) {
+    console.error('删除专攻记录失败', err)
+    uni.showToast({ title: '删除失败', icon: 'none' })
+  }
+}
 
 function stopTick() {
   if (tickTimer) {
@@ -288,8 +707,8 @@ async function restoreSession() {
 }
 
 async function handleToggle() {
-  if (btnBusy.value || counting.value) return
-  btnBusy.value = true
+  if (sealBusy.value || counting.value) return
+  sealBusy.value = true
   try {
     if (running.value) {
       await endSession(sessionId.value, startedAt.value)
@@ -313,7 +732,7 @@ async function handleToggle() {
     clearCountdown()
     uni.showToast({ title: '操作失败', icon: 'none' })
   } finally {
-    btnBusy.value = false
+    sealBusy.value = false
   }
 }
 
@@ -340,48 +759,20 @@ function closeHistory() {
 <style lang="scss" scoped>
 .hs-page {
   position: relative;
-  min-height: 100vh;
+  height: 100%;
   padding: 16rpx 28rpx 80rpx;
   box-sizing: border-box;
-  overflow: hidden;
-  background:
-    radial-gradient(ellipse 90% 55% at 50% 18%, rgba(180, 130, 60, 0.14), transparent 70%),
-    radial-gradient(ellipse 70% 40% at 50% 85%, rgba(40, 70, 80, 0.35), transparent 65%),
-    linear-gradient(180deg, #10161c 0%, #0c1014 45%, #080b0e 100%);
-}
-
-.hs-glow {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.hs-glow--a {
-  width: 420rpx;
-  height: 420rpx;
-  left: 50%;
-  top: 28%;
-  margin-left: -210rpx;
-  background: radial-gradient(circle, rgba(201, 162, 79, 0.16), transparent 68%);
-}
-
-.hs-glow--b {
-  width: 560rpx;
-  height: 280rpx;
-  left: 50%;
-  bottom: 8%;
-  margin-left: -280rpx;
-  background: radial-gradient(ellipse, rgba(70, 100, 110, 0.2), transparent 70%);
+  overflow-y: auto;
 }
 
 .hs-ring {
   position: absolute;
   left: 50%;
-  top: 42%;
-  width: 520rpx;
-  height: 520rpx;
-  margin-left: -260rpx;
-  margin-top: -140rpx;
+  top: 36%;
+  width: 420rpx;
+  height: 420rpx;
+  margin-left: -210rpx;
+  margin-top: -100rpx;
   border-radius: 50%;
   border: 1rpx solid rgba(201, 162, 79, 0.12);
   pointer-events: none;
@@ -401,13 +792,13 @@ function closeHistory() {
 .hs-plaque {
   position: relative;
   z-index: 2;
-  margin: 0 -8rpx 28rpx;
+  margin: 0 -8rpx 16rpx;
 }
 
 .hs-plaque-frame {
   position: relative;
-  min-height: 96rpx;
-  padding: 22rpx 28rpx;
+  min-height: 80rpx;
+  padding: 16rpx 24rpx;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -458,30 +849,30 @@ function closeHistory() {
 }
 
 .hs-plaque-title {
-  font-size: 40rpx;
+  font-size: 34rpx;
   font-weight: 700;
-  letter-spacing: 28rpx;
+  letter-spacing: 22rpx;
   color: #e8c878;
-  text-indent: 28rpx;
+  text-indent: 22rpx;
   text-shadow: 0 3rpx 0 rgba(40, 28, 10, 0.65);
 }
 
 .hs-plaque-hist {
   position: absolute;
-  right: 28rpx;
+  right: 24rpx;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 26rpx;
+  font-size: 24rpx;
   font-weight: 600;
   color: rgba(220, 190, 130, 0.9);
   letter-spacing: 4rpx;
-  padding: 8rpx 4rpx;
+  padding: 6rpx 4rpx;
 }
 
 .hs-center {
   position: relative;
   z-index: 2;
-  margin-top: 20rpx;
+  margin-top: 8rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -489,9 +880,9 @@ function closeHistory() {
 
 /* 横批 */
 .hs-hengpi {
-  min-width: 420rpx;
-  padding: 16rpx 36rpx;
-  margin-bottom: 24rpx;
+  min-width: 360rpx;
+  padding: 12rpx 28rpx;
+  margin-bottom: 16rpx;
   box-sizing: border-box;
   text-align: center;
   background: linear-gradient(180deg, #2a2216 0%, #1a1410 100%);
@@ -512,9 +903,9 @@ function closeHistory() {
 }
 
 .hs-hengpi-text {
-  font-size: 34rpx;
+  font-size: 28rpx;
   font-weight: 700;
-  letter-spacing: 6rpx;
+  letter-spacing: 5rpx;
   color: rgba(210, 185, 140, 0.78);
 }
 
@@ -538,12 +929,12 @@ function closeHistory() {
 }
 
 .hs-timer {
-  font-size: 52rpx;
+  font-size: 42rpx;
   font-weight: 300;
   letter-spacing: 2rpx;
   color: rgba(245, 230, 190, 0.92);
   font-variant-numeric: tabular-nums;
-  margin-bottom: 40rpx;
+  margin-bottom: 24rpx;
 }
 
 /* 对联行 */
@@ -558,7 +949,7 @@ function closeHistory() {
 }
 
 .couplet {
-  width: 88rpx;
+  width: 72rpx;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -569,7 +960,7 @@ function closeHistory() {
   box-shadow:
     0 10rpx 20rpx rgba(0, 0, 0, 0.4),
     inset 0 1rpx 0 rgba(255, 220, 150, 0.1);
-  padding: 16rpx 0 18rpx;
+  padding: 12rpx 0 14rpx;
   box-sizing: border-box;
   transition:
     border-color 0.35s ease,
@@ -585,16 +976,16 @@ function closeHistory() {
 }
 
 .couplet-cap {
-  width: 36rpx;
-  height: 6rpx;
+  width: 28rpx;
+  height: 5rpx;
   border-radius: 3rpx;
   background: rgba(200, 160, 70, 0.55);
-  margin-bottom: 14rpx;
+  margin-bottom: 10rpx;
 }
 
 .couplet-cap.bottom {
   margin-bottom: 0;
-  margin-top: 14rpx;
+  margin-top: 10rpx;
 }
 
 .couplet-body {
@@ -604,9 +995,9 @@ function closeHistory() {
 }
 
 .couplet-char {
-  font-size: 38rpx;
+  font-size: 30rpx;
   font-weight: 700;
-  line-height: 1.48;
+  line-height: 1.38;
   color: #e0c070;
   text-shadow:
     0 2rpx 0 rgba(30, 20, 8, 0.85),
@@ -622,8 +1013,8 @@ function closeHistory() {
 
 .seal {
   position: relative;
-  width: 260rpx;
-  height: 260rpx;
+  width: 210rpx;
+  height: 210rpx;
   flex-shrink: 0;
   border-radius: 50%;
   transform: translateY(0);
@@ -633,7 +1024,7 @@ function closeHistory() {
 }
 
 .seal.pressed {
-  transform: translateY(10rpx) scale(0.97);
+  transform: translateY(8rpx) scale(0.97);
 }
 
 .seal.busy {
@@ -665,8 +1056,8 @@ function closeHistory() {
   border-radius: 50%;
   background: linear-gradient(145deg, #6a5430 0%, #2a2114 42%, #8a6d38 100%);
   box-shadow:
-    0 18rpx 0 #1a140c,
-    0 28rpx 40rpx rgba(0, 0, 0, 0.55),
+    0 14rpx 0 #1a140c,
+    0 22rpx 32rpx rgba(0, 0, 0, 0.55),
     inset 0 2rpx 0 rgba(255, 230, 170, 0.25);
   transition: background 0.35s ease, box-shadow 0.35s ease;
 }
@@ -674,33 +1065,33 @@ function closeHistory() {
 .seal.on .seal-rim {
   background: linear-gradient(145deg, #d4a84a 0%, #7a5420 40%, #f0d080 100%);
   box-shadow:
-    0 18rpx 0 #3a2a10,
-    0 28rpx 48rpx rgba(0, 0, 0, 0.55),
-    0 0 48rpx rgba(220, 170, 70, 0.28),
+    0 14rpx 0 #3a2a10,
+    0 22rpx 40rpx rgba(0, 0, 0, 0.55),
+    0 0 40rpx rgba(220, 170, 70, 0.28),
     inset 0 2rpx 0 rgba(255, 245, 210, 0.4);
 }
 
 .seal.awaken .seal-rim {
   box-shadow:
-    0 18rpx 0 #3a2a10,
-    0 28rpx 48rpx rgba(0, 0, 0, 0.55),
-    0 0 80rpx rgba(240, 200, 90, 0.55),
+    0 14rpx 0 #3a2a10,
+    0 22rpx 40rpx rgba(0, 0, 0, 0.55),
+    0 0 64rpx rgba(240, 200, 90, 0.55),
     inset 0 2rpx 0 rgba(255, 245, 210, 0.55);
 }
 
 .seal.pressed .seal-rim {
   box-shadow:
-    0 8rpx 0 #1a140c,
-    0 14rpx 24rpx rgba(0, 0, 0, 0.45),
+    0 6rpx 0 #1a140c,
+    0 12rpx 20rpx rgba(0, 0, 0, 0.45),
     inset 0 2rpx 0 rgba(255, 230, 170, 0.2);
 }
 
 .seal-face {
   position: absolute;
-  left: 18rpx;
-  top: 18rpx;
-  right: 18rpx;
-  bottom: 18rpx;
+  left: 14rpx;
+  top: 14rpx;
+  right: 14rpx;
+  bottom: 14rpx;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #5c4528 0%, #2c2114 55%, #1a140c 100%);
   border: 3rpx solid rgba(180, 140, 70, 0.45);
@@ -723,12 +1114,12 @@ function closeHistory() {
 }
 
 .seal-glyph {
-  font-size: 72rpx;
+  font-size: 58rpx;
   font-weight: 700;
   color: rgba(230, 200, 140, 0.88);
   line-height: 1;
-  margin-bottom: 8rpx;
-  text-shadow: 0 4rpx 0 rgba(0, 0, 0, 0.35);
+  margin-bottom: 6rpx;
+  text-shadow: 0 3rpx 0 rgba(0, 0, 0, 0.35);
 }
 
 .seal.on .seal-glyph {
@@ -739,8 +1130,8 @@ function closeHistory() {
 }
 
 .seal-action {
-  font-size: 24rpx;
-  letter-spacing: 8rpx;
+  font-size: 22rpx;
+  letter-spacing: 6rpx;
   color: rgba(210, 180, 120, 0.7);
   font-weight: 600;
 }
@@ -751,10 +1142,10 @@ function closeHistory() {
 
 .seal-shine {
   position: absolute;
-  left: 40rpx;
-  top: 28rpx;
-  width: 90rpx;
-  height: 48rpx;
+  left: 32rpx;
+  top: 22rpx;
+  width: 72rpx;
+  height: 40rpx;
   border-radius: 50%;
   background: linear-gradient(180deg, rgba(255, 245, 210, 0.22), transparent);
   pointer-events: none;
@@ -764,10 +1155,10 @@ function closeHistory() {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 260rpx;
-  height: 260rpx;
-  margin-left: -130rpx;
-  margin-top: -130rpx;
+  width: 210rpx;
+  height: 210rpx;
+  margin-left: -105rpx;
+  margin-top: -105rpx;
   border-radius: 50%;
   border: 2rpx solid rgba(240, 200, 100, 0.55);
   pointer-events: none;
@@ -786,20 +1177,20 @@ function closeHistory() {
 }
 
 .hs-hint {
-  margin-top: 48rpx;
-  font-size: 24rpx;
+  margin-top: 28rpx;
+  font-size: 22rpx;
   color: rgba(180, 160, 120, 0.45);
   letter-spacing: 2rpx;
 }
 
 .hs-ritual {
-  margin-top: 16rpx;
-  font-size: 26rpx;
-  letter-spacing: 10rpx;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  letter-spacing: 8rpx;
   color: #e8c878;
   font-weight: 600;
   opacity: 0;
-  transform: translateY(8rpx);
+  transform: translateY(6rpx);
   transition:
     opacity 0.35s ease,
     transform 0.35s ease;
@@ -808,6 +1199,144 @@ function closeHistory() {
 .hs-ritual.show {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* 专攻区 */
+.hs-focus {
+  position: relative;
+  z-index: 2;
+  margin-top: 48rpx;
+  padding: 28rpx 24rpx 8rpx;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, rgba(26, 22, 16, 0.92) 0%, rgba(14, 12, 10, 0.88) 100%);
+  border: 1rpx solid rgba(180, 140, 70, 0.28);
+  border-radius: 16rpx;
+  box-shadow: inset 0 1rpx 0 rgba(255, 220, 150, 0.08);
+}
+
+.hs-focus-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.hs-focus-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  letter-spacing: 12rpx;
+  color: rgba(232, 200, 120, 0.92);
+  text-indent: 12rpx;
+}
+
+.hs-focus-hist {
+  font-size: 26rpx;
+  color: rgba(220, 190, 130, 0.85);
+  letter-spacing: 4rpx;
+  padding: 8rpx 4rpx;
+}
+
+.hs-focus-input-wrap {
+  padding: 12rpx 8rpx 16rpx;
+  margin-bottom: 20rpx;
+  border-bottom: 1rpx solid rgba(220, 180, 90, 0.16);
+}
+
+.hs-focus-input {
+  width: 100%;
+  min-height: 96rpx;
+  font-size: 30rpx;
+  line-height: 1.55;
+  color: rgba(245, 230, 190, 0.92);
+  letter-spacing: 1rpx;
+}
+
+.hs-focus-ph {
+  color: rgba(180, 160, 120, 0.4);
+}
+
+.hs-focus-range {
+  margin-bottom: 24rpx;
+}
+
+.hs-focus-range-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8rpx 10rpx;
+}
+
+.hs-focus-tag {
+  font-size: 22rpx;
+  color: rgba(180, 160, 120, 0.55);
+  letter-spacing: 2rpx;
+  flex-shrink: 0;
+}
+
+.hs-focus-pick {
+  font-size: 24rpx;
+  color: rgba(235, 210, 160, 0.9);
+  letter-spacing: 1rpx;
+  padding: 4rpx 0;
+}
+
+.hs-focus-sep {
+  font-size: 22rpx;
+  color: rgba(180, 160, 120, 0.35);
+  margin: 0 4rpx;
+}
+
+.hs-focus-sum {
+  display: block;
+  margin-top: 14rpx;
+  font-size: 22rpx;
+  color: rgba(180, 160, 120, 0.5);
+  letter-spacing: 1rpx;
+  line-height: 1.5;
+}
+
+.hs-focus-actions {
+  display: flex;
+  gap: 20rpx;
+  padding: 4rpx 0 12rpx;
+}
+
+.hs-focus-btn {
+  flex: 1;
+  height: 76rpx;
+  border-radius: 10rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1rpx solid rgba(180, 140, 70, 0.4);
+}
+
+.hs-focus-btn.primary {
+  background: linear-gradient(180deg, #2a2216 0%, #1a1410 100%);
+  border-color: rgba(220, 180, 90, 0.55);
+}
+
+.hs-focus-btn.busy,
+.hs-focus-btn.disabled {
+  opacity: 0.4;
+}
+
+.hs-focus-btn--active {
+  opacity: 0.82;
+}
+
+.hs-focus-btn-text {
+  font-size: 28rpx;
+  letter-spacing: 10rpx;
+  text-indent: 10rpx;
+  color: rgba(220, 190, 130, 0.85);
+}
+
+.hs-focus-btn-text.primary {
+  color: #e8c878;
+  font-weight: 600;
 }
 
 /* 倒计时仪式层 */
@@ -1000,5 +1529,50 @@ function closeHistory() {
   color: #e8c878;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+.focus-hist-item {
+  margin: 0 24rpx 16rpx;
+  padding: 24rpx 28rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1rpx solid rgba(201, 162, 79, 0.12);
+}
+
+.focus-hist-content {
+  display: block;
+  font-size: 28rpx;
+  color: rgba(245, 230, 190, 0.92);
+  line-height: 1.55;
+  letter-spacing: 1rpx;
+  margin-bottom: 12rpx;
+}
+
+.focus-hist-range {
+  display: block;
+  font-size: 24rpx;
+  color: rgba(200, 175, 120, 0.7);
+  margin-bottom: 10rpx;
+}
+
+.focus-hist-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.focus-hist-done {
+  flex: 1;
+  font-size: 22rpx;
+  color: rgba(180, 160, 120, 0.45);
+}
+
+.focus-hist-del {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: rgba(220, 190, 130, 0.75);
+  letter-spacing: 2rpx;
+  padding: 4rpx 0 4rpx 12rpx;
 }
 </style>

@@ -8,6 +8,15 @@
     }"
     :style="rootStyle"
   >
+    <image
+      v-if="moodBgSrc"
+      class="page-mood-bg"
+      :src="moodBgSrc"
+      mode="aspectFill"
+      @error="onMoodBgError"
+    />
+    <view class="page-mood-veil" :class="{ dark: darkNav }" />
+
     <CustomNav :back="back" :dark="darkNav" />
 
     <view
@@ -21,7 +30,12 @@
 </template>
 
 <script setup>
-import { themeStyle } from '@/utils/moodTheme'
+import {
+  themeStyle,
+  themeBgUrl,
+  invalidateThemeBgCache,
+  ensureMoodThemeBg,
+} from '@/utils/moodTheme'
 
 const props = defineProps({
   /** 是否显示返回，传给 CustomNav；默认按页面栈自动判断 */
@@ -62,9 +76,40 @@ const props = defineProps({
 })
 
 /** 显式取 .value，避免小程序端导入的 ref 未自动解包 */
+const moodBgSrc = computed(() => themeBgUrl.value || '')
+
+let bgErrorRetrying = false
+
+function onMoodBgError() {
+  const bad = themeBgUrl.value || ''
+  if (!bad || bgErrorRetrying) return
+  bgErrorRetrying = true
+  invalidateThemeBgCache(bad)
+  ensureMoodThemeBg(true)
+  setTimeout(function () {
+    bgErrorRetrying = false
+  }, 2000)
+}
+
 const rootStyle = computed(() => {
-  if (!props.extraStyle) return themeStyle.value
-  return Object.assign({}, themeStyle.value, props.extraStyle)
+  const base = Object.assign({}, themeStyle.value || {})
+  const hasBg = !!moodBgSrc.value
+  // 有壁纸时透明透出；无壁纸回退主题实色，避免空白
+  if (hasBg) {
+    base.background = 'transparent'
+    base.backgroundColor = 'transparent'
+  } else {
+    const solid = base['--color-bg'] || '#F3EBE3'
+    base.background = solid
+    base.backgroundColor = solid
+  }
+  if (!props.extraStyle) return base
+  const merged = Object.assign(base, props.extraStyle)
+  if (hasBg) {
+    merged.background = 'transparent'
+    merged.backgroundColor = 'transparent'
+  }
+  return merged
 })
 
 const bodyStyle = computed(() => {
@@ -77,9 +122,44 @@ const bodyStyle = computed(() => {
 .page-root {
   position: relative;
   min-height: 100vh;
-  background-color: $color-bg;
+  background-color: transparent;
   box-sizing: border-box;
   padding: 0 32rpx 48rpx;
+}
+
+.page-mood-bg {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.78;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.page-mood-veil {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--color-veil, rgba(243, 235, 227, 0.52));
+}
+
+.page-mood-veil.dark {
+  background: linear-gradient(
+    165deg,
+    rgba(12, 16, 20, 0.42) 0%,
+    rgba(12, 16, 20, 0.32) 48%,
+    rgba(8, 11, 14, 0.38) 100%
+  );
 }
 
 .page-root--flush {
@@ -87,7 +167,6 @@ const bodyStyle = computed(() => {
 }
 
 .page-root--hero {
-  background: $gradient-hero;
   overflow: hidden;
 }
 
@@ -99,6 +178,7 @@ const bodyStyle = computed(() => {
 }
 
 .page-body {
+  position: relative;
   padding-top: 32rpx;
   box-sizing: border-box;
 }

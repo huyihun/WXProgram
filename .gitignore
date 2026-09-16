@@ -1,6 +1,34 @@
+# 简历等资源待上传目录（不进小程序包）
+assets/resources/
 node_modules/
 dist/
 miniprogram_npm/
 .DS_Store
 project.private.config.json
 books-dist/.tmp-epub/
+books-dist/.tmp-zhencang/
+books-dist/.tmp-zhencang-extract/
+.venv-mobi/
+# 含 API Key 的本机脚本，勿提交
+scripts/*.local.sh
+SecretKey.csv
+**/SecretKey.csv
+# code-assist 本机产物
+code-assist/out/
+code-assist/xiaohei-brief.json
+code-assist/xiaohei-pack.json
+code-assist/xiaohei-manifest.json
+code-assist/xiaohei-shards/
+code-assist/xiaohei-aliases.json
+code-assist/xiaohei-page-index.json
+# 旧路径（若本地仍有残留）
+xiaohei-brief.json
+xiaohei-pack.json
+xiaohei-manifest.json
+xiaohei-shards/
+xiaohei-aliases.json
+xiaohei-page-index.json
+xiaohei-out/
+*.local.env
+# 可含本机路径；密钥请用环境变量，勿写入此文件
+# code-assist/config.json 可提交（无密钥）

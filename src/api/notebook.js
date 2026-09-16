@@ -211,6 +211,15 @@ export async function getMoodHistory() {
   return fetchAll(() => db.collection('notebook_moods').orderBy('date', 'desc'))
 }
 
+/** 今日心情，没有则取最近一条（主题反显用） */
+export async function getLatestMood() {
+  const todayMood = await getMoodByDate(getToday())
+  if (todayMood && todayMood.moodKey) return todayMood
+  const history = await getMoodHistory()
+  if (history && history.length && history[0].moodKey) return history[0]
+  return null
+}
+
 /** 同日心情存在则更新，否则新增 */
 export async function upsertMood(data) {
   const existing = await getMoodByDate(data.date)

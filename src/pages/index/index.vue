@@ -28,7 +28,10 @@
                 hover-class="entry-card--active"
                 @tap="handleEntryTap(item)"
               >
-                <view class="entry-icon-box">
+                <view
+                  class="entry-icon-box"
+                  :class="{ 'entry-icon-box--tech': item.id === 'codeAssist' }"
+                >
                   <view v-if="item.id === 'notebook'" class="icon-notebook">
                     <view class="icon-notebook-spine" />
                     <view class="icon-notebook-page">
@@ -57,6 +60,15 @@
                       <view class="icon-novel-page" />
                     </view>
                   </view>
+                  <view v-else-if="item.id === 'wallpaper'" class="icon-wallpaper">
+                    <view class="icon-wallpaper-frame" />
+                    <view class="icon-wallpaper-pic" />
+                  </view>
+                  <view v-else-if="item.id === 'resources'" class="icon-resources">
+                    <view class="icon-resources-box" />
+                    <view class="icon-resources-line l1" />
+                    <view class="icon-resources-line l2" />
+                  </view>
                   <view v-else-if="item.id === 'serious'" class="icon-serious">
                     <view class="icon-serious-bar" />
                     <view class="icon-serious-dot" />
@@ -69,9 +81,14 @@
                     <view class="icon-hushen-seal" />
                     <view class="icon-hushen-mark" />
                   </view>
-                  <view v-else-if="item.id === 'zhuanggong'" class="icon-zhuanggong">
-                    <view class="icon-zhuanggong-dot" />
-                    <view class="icon-zhuanggong-line" />
+                  <view v-else-if="item.id === 'twin'" class="icon-twin">
+                    <view class="icon-twin-face" />
+                    <view class="icon-twin-dot" />
+                  </view>
+                  <view v-else-if="item.id === 'codeAssist'" class="icon-code">
+                    <view class="icon-code-left" />
+                    <view class="icon-code-slash" />
+                    <view class="icon-code-right" />
                   </view>
                 </view>
                 <text class="entry-name">{{ item.name }}</text>
@@ -126,18 +143,34 @@
       <text v-if="moodEmoji" class="mood-entry-emoji">{{ moodEmoji }}</text>
       <text v-else class="mood-entry-text">心情</text>
     </view>
+    <view
+      class="ai-float"
+      :class="{ dragging: aiDragging, bounce: !aiDragging }"
+      :style="aiFloatStyle"
+      @touchstart.stop="onAiTouchStart"
+      @touchmove.stop.prevent="onAiTouchMove"
+      @touchend.stop="onAiTouchEnd"
+    >
+      <view class="ai-float-ring" />
+      <view class="ai-float-core">
+        <text class="ai-float-text">AI</text>
+      </view>
+    </view>
 
     <MoodPicker :show="moodOpen" @close="moodOpen = false" @change="onMoodChange" />
+    <AiChatSheet :show="aiOpen" @close="aiOpen = false" />
     <HomeMusicBar />
   </PageRoot>
 </template>
 
 <script setup>
 import { MOOD_OPTIONS, getMoodByDate, getToday } from '@/api/notebook'
+import { currentMoodKey, ensureMoodThemeBg } from '@/utils/moodTheme'
 import { loadHomeWeather, COMMON_CITIES } from '@/api/weather'
 import { getWeatherFxLocalPath } from '@/utils/weatherFx'
 import { loadOwnerFlag, isOwnerSync } from '@/utils/owner'
 import MoodPicker from '@/components/MoodPicker.vue'
+import AiChatSheet from '@/components/AiChatSheet.vue'
 import HomeMusicBar from '@/components/HomeMusicBar.vue'
 
 /** 本地治愈语录，每次回到首页随机展示一句 */
@@ -268,8 +301,29 @@ const entries = ref([
 const novelEntry = {
   id: 'novel',
   name: '小说',
-  desc: '东野圭吾作品集',
+  desc: '东野 · 珍藏',
   path: '/pages/novel/index',
+}
+
+const theaterEntry = {
+  id: 'theater',
+  name: '剧场',
+  desc: '从小和太子过命之交',
+  path: '/pages/theater/index',
+}
+
+const wallpaperEntry = {
+  id: 'wallpaper',
+  name: '壁纸',
+  desc: '精选手机壁纸',
+  path: '/pages/wallpaper/index',
+}
+
+const resourcesEntry = {
+  id: 'resources',
+  name: '资源库',
+  desc: '简历等实用模板',
+  path: '/pages/resources/index',
 }
 
 const seriousEntry = {
@@ -289,20 +343,58 @@ const dietEntry = {
 const hushenEntry = {
   id: 'hushen',
   name: '胡神',
-  desc: '胡神模式',
+  desc: '胡神 · 专攻',
   path: '/pages/hushen/index',
 }
 
-const zhuanggongEntry = {
-  id: 'zhuanggong',
-  name: '专攻',
-  desc: '只做一件事',
-  path: '/pages/zhuanggong/index',
+const twinEntry = {
+  id: 'twin',
+  name: '分身',
+  desc: '胡神 AI 分身',
+  path: '/pages/twin/index',
+}
+
+const codeAssistEntry = {
+  id: 'codeAssist',
+  name: '小黑',
+  desc: '本机 publish 后对话排查',
+  path: '/pages/code-assist/index',
+}
+
+function emojiForMoodKey(key) {
+  for (let i = 0; i < MOOD_OPTIONS.length; i++) {
+    if (MOOD_OPTIONS[i].key === key) return MOOD_OPTIONS[i].emoji
+  }
+  return ''
 }
 
 const moodOpen = ref(false)
-const moodEmoji = ref('')
+const moodEmoji = ref(emojiForMoodKey(currentMoodKey.value))
 const moodEntryStyle = ref({})
+const aiOpen = ref(false)
+const aiDragging = ref(false)
+const aiFloatLeft = ref(0)
+const aiFloatTop = ref(0)
+
+const AI_FLOAT_SIZE = 56
+const AI_FLOAT_PAD = 8
+const AI_FLOAT_POS_KEY = 'ai_float_pos_v2'
+const AI_TAP_SLOP = 8
+
+let aiTouchStartX = 0
+let aiTouchStartY = 0
+let aiOriginLeft = 0
+let aiOriginTop = 0
+let aiMoved = false
+
+const aiFloatStyle = computed(() => {
+  return {
+    left: aiFloatLeft.value + 'px',
+    top: aiFloatTop.value + 'px',
+    width: AI_FLOAT_SIZE + 'px',
+    height: AI_FLOAT_SIZE + 'px',
+  }
+})
 const weatherDockStyle = ref({})
 const contentPadStyle = ref({})
 const healingQuote = ref('')
@@ -332,7 +424,7 @@ const entrySections = computed(() => {
       id: 'leisure',
       title: '休闲',
       sub: 'LEISURE',
-      items: [novelEntry],
+      items: [novelEntry, theaterEntry, wallpaperEntry, resourcesEntry],
     },
   ]
 
@@ -341,7 +433,7 @@ const entrySections = computed(() => {
       id: 'personal',
       title: '个人',
       sub: 'PERSONAL',
-      items: [seriousEntry, dietEntry, hushenEntry, zhuanggongEntry],
+      items: [seriousEntry, dietEntry, hushenEntry, twinEntry, codeAssistEntry],
     })
   }
 
@@ -396,11 +488,16 @@ const todayText = computed(() => {
 
 onMounted(async () => {
   layoutTopEntries()
-  pickHealingQuote()
-  loadMoodEntry()
+  initAiFloatPos()
   refreshWeather()
   await loadOwnerFlag()
   showPersonal.value = isOwnerSync()
+})
+
+onShow(() => {
+  pickHealingQuote()
+  loadMoodEntry()
+  ensureMoodThemeBg(false)
 })
 
 onUnmounted(() => {
@@ -518,10 +615,11 @@ function layoutTopEntries() {
 
   if (!menu) {
     const top = (sys.statusBarHeight || 20) + 6
+    const moodH = 32
     moodEntryStyle.value = {
       top: top + 'px',
       right: edgePad + 'px',
-      height: '32px',
+      height: moodH + 'px',
     }
     weatherDockStyle.value = {
       top: top + 'px',
@@ -555,24 +653,112 @@ function layoutTopEntries() {
   }
 }
 
+function getAiFloatBounds() {
+  const sys = uni.getSystemInfoSync()
+  const safeBottom = (sys.safeAreaInsets && sys.safeAreaInsets.bottom) || 0
+  const minLeft = AI_FLOAT_PAD
+  const maxLeft = Math.max(minLeft, sys.windowWidth - AI_FLOAT_SIZE - AI_FLOAT_PAD)
+  const minTop = (sys.statusBarHeight || 20) + 4
+  const maxTop = Math.max(minTop, sys.windowHeight - AI_FLOAT_SIZE - safeBottom - AI_FLOAT_PAD - 24)
+  return { minLeft: minLeft, maxLeft: maxLeft, minTop: minTop, maxTop: maxTop }
+}
+
+function clampAiFloat(left, top) {
+  const b = getAiFloatBounds()
+  let l = left
+  let t = top
+  if (l < b.minLeft) l = b.minLeft
+  if (l > b.maxLeft) l = b.maxLeft
+  if (t < b.minTop) t = b.minTop
+  if (t > b.maxTop) t = b.maxTop
+  return { left: l, top: t }
+}
+
+function defaultAiFloatPos() {
+  const sys = uni.getSystemInfoSync()
+  const menu = wx.getMenuButtonBoundingClientRect()
+  // 默认贴最右侧
+  const left = sys.windowWidth - AI_FLOAT_SIZE - AI_FLOAT_PAD
+  let top = (sys.statusBarHeight || 20) + 48
+  if (menu && menu.bottom) {
+    top = menu.bottom + 12
+  }
+  return clampAiFloat(left, top)
+}
+
+function initAiFloatPos() {
+  try {
+    const saved = uni.getStorageSync(AI_FLOAT_POS_KEY)
+    if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
+      const pos = clampAiFloat(saved.left, saved.top)
+      aiFloatLeft.value = pos.left
+      aiFloatTop.value = pos.top
+      return
+    }
+  } catch (err) {
+    // ignore
+  }
+  const pos = defaultAiFloatPos()
+  aiFloatLeft.value = pos.left
+  aiFloatTop.value = pos.top
+}
+
+function saveAiFloatPos() {
+  try {
+    uni.setStorageSync(AI_FLOAT_POS_KEY, {
+      left: aiFloatLeft.value,
+      top: aiFloatTop.value,
+    })
+  } catch (err) {
+    // ignore
+  }
+}
+
+function onAiTouchStart(e) {
+  const t = e.touches && e.touches[0]
+  if (!t) return
+  aiTouchStartX = t.clientX
+  aiTouchStartY = t.clientY
+  aiOriginLeft = aiFloatLeft.value
+  aiOriginTop = aiFloatTop.value
+  aiMoved = false
+  aiDragging.value = true
+}
+
+function onAiTouchMove(e) {
+  const t = e.touches && e.touches[0]
+  if (!t) return
+  const dx = t.clientX - aiTouchStartX
+  const dy = t.clientY - aiTouchStartY
+  if (!aiMoved && Math.abs(dx) + Math.abs(dy) > AI_TAP_SLOP) {
+    aiMoved = true
+  }
+  const pos = clampAiFloat(aiOriginLeft + dx, aiOriginTop + dy)
+  aiFloatLeft.value = pos.left
+  aiFloatTop.value = pos.top
+}
+
+function onAiTouchEnd() {
+  aiDragging.value = false
+  if (!aiMoved) {
+    aiOpen.value = true
+    return
+  }
+  saveAiFloatPos()
+}
+
 async function loadMoodEntry() {
   try {
     const data = await getMoodByDate(getToday())
     if (data && data.moodKey) {
-      moodEmoji.value = getEmojiByKey(data.moodKey)
+      moodEmoji.value = emojiForMoodKey(data.moodKey)
     } else {
-      moodEmoji.value = ''
+      moodEmoji.value = emojiForMoodKey(currentMoodKey.value)
     }
   } catch (err) {
     console.error('加载首页心情失败', err)
+    moodEmoji.value = emojiForMoodKey(currentMoodKey.value)
   }
-}
-
-function getEmojiByKey(key) {
-  for (let i = 0; i < MOOD_OPTIONS.length; i++) {
-    if (MOOD_OPTIONS[i].key === key) return MOOD_OPTIONS[i].emoji
-  }
-  return ''
 }
 
 function onMoodChange(item) {
@@ -626,15 +812,87 @@ function handleEntryTap(item) {
   line-height: 1;
 }
 
+.ai-float {
+  position: fixed;
+  z-index: 120;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.ai-float.dragging {
+  opacity: 0.92;
+}
+
+.ai-float.bounce {
+  animation: aiFloatBounce 1.6s ease-in-out infinite;
+}
+
+.ai-float-ring {
+  position: absolute;
+  inset: -6rpx;
+  border-radius: 50%;
+  border: 2rpx solid var(--color-primary);
+  box-shadow: 0 0 18rpx var(--color-primary);
+  opacity: 0.5;
+  animation: aiFloatPulse 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.ai-float.dragging .ai-float-ring {
+  animation: none;
+}
+
+.ai-float-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 35% 30%, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  border: 2rpx solid var(--color-card-soft);
+  box-shadow: var(--shadow-icon);
+}
+
+.ai-float-text {
+  font-size: 28rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  color: #fff;
+  text-shadow: 0 2rpx 6rpx rgba(0, 40, 80, 0.35);
+}
+
+@keyframes aiFloatBounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10rpx);
+  }
+}
+
+@keyframes aiFloatPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
 .content {
   position: relative;
   z-index: 1;
-  padding: 48rpx 40rpx 80rpx;
+  padding: 36rpx 40rpx 160rpx;
   box-sizing: border-box;
 }
 
 .hero {
-  margin-bottom: 56rpx;
+  margin-bottom: 28rpx;
   padding-top: 8rpx;
 }
 
@@ -652,7 +910,7 @@ function handleEntryTap(item) {
 }
 
 .content--vip .entry-name {
-  font-size: 26rpx;
+  font-size: 22rpx;
   font-weight: 700;
 }
 
@@ -972,27 +1230,31 @@ function handleEntryTap(item) {
   line-height: 1.75;
   letter-spacing: 2rpx;
   opacity: 0.92;
+  text-shadow:
+    0 1rpx 2rpx rgba(255, 255, 255, 0.95),
+    0 0 12rpx rgba(255, 255, 255, 0.72),
+    0 2rpx 8rpx rgba(255, 255, 255, 0.55);
 }
 
 .entry-section {
-  margin-top: 32rpx;
+  margin-top: 20rpx;
 }
 
 .entry-section:first-of-type {
-  margin-top: 28rpx;
+  margin-top: 18rpx;
 }
 
 .section-head {
   position: relative;
   display: flex;
   align-items: center;
-  margin-bottom: 18rpx;
+  margin-bottom: 10rpx;
   padding-left: 4rpx;
 }
 
 .section-accent {
   width: 10rpx;
-  height: 36rpx;
+  height: 28rpx;
   margin-right: 14rpx;
   border-radius: 4rpx;
   background: linear-gradient(180deg, $color-primary 0%, $color-primary-dark 100%);
@@ -1009,11 +1271,15 @@ function handleEntryTap(item) {
 }
 
 .section-title {
-  font-size: 42rpx;
+  font-size: 32rpx;
   font-weight: 800;
   color: $color-title;
   letter-spacing: 6rpx;
   line-height: 1.1;
+  text-shadow:
+    0 1rpx 2rpx rgba(255, 255, 255, 0.95),
+    0 0 12rpx rgba(255, 255, 255, 0.72),
+    0 2rpx 8rpx rgba(255, 255, 255, 0.55);
 }
 
 .section-sub {
@@ -1021,8 +1287,11 @@ function handleEntryTap(item) {
   font-weight: 600;
   color: $color-primary;
   letter-spacing: 3rpx;
-  opacity: 0.55;
+  opacity: 0.75;
   transform: translateY(-4rpx);
+  text-shadow:
+    0 1rpx 2rpx rgba(255, 255, 255, 0.9),
+    0 0 10rpx rgba(255, 255, 255, 0.65);
 }
 
 .section-line {
@@ -1043,17 +1312,19 @@ function handleEntryTap(item) {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 20rpx;
+  justify-content: flex-start;
+  gap: 24rpx;
 }
 
 .entry-card {
   box-sizing: border-box;
-  width: calc((100% - 40rpx) / 3);
+  width: calc((100% - 48rpx) / 3);
+  height: 148rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24rpx 12rpx 20rpx;
+  padding: 14rpx 8rpx 12rpx;
   background: $color-card-soft;
   border-radius: 24rpx;
   border: 1rpx solid rgba(255, 255, 255, 0.92);
@@ -1072,17 +1343,27 @@ function handleEntryTap(item) {
 }
 
 .entry-icon-box {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 20rpx;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 16rpx;
   background: linear-gradient(145deg, $color-primary 0%, $color-primary-dark 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 14rpx;
+  margin-bottom: 8rpx;
   flex-shrink: 0;
   box-sizing: border-box;
   box-shadow: $shadow-icon;
+}
+
+.entry-icon-box--tech {
+  background: linear-gradient(145deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+}
+
+/* 图标盒子缩小后，内部 glyph 同步缩放 */
+.entry-icon-box > view {
+  transform: scale(0.78);
+  transform-origin: center center;
 }
 
 /* 记事本：书脊 + 内页粗线 */
@@ -1260,6 +1541,69 @@ function handleEntryTap(item) {
   background: rgba(74, 159, 232, 0.12);
 }
 
+/* 壁纸：相框 */
+.icon-wallpaper {
+  position: relative;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.icon-wallpaper-frame {
+  position: absolute;
+  left: 6rpx;
+  top: 4rpx;
+  right: 6rpx;
+  bottom: 4rpx;
+  border-radius: 6rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.95);
+  box-sizing: border-box;
+}
+
+.icon-wallpaper-pic {
+  position: absolute;
+  left: 14rpx;
+  top: 12rpx;
+  right: 14rpx;
+  bottom: 12rpx;
+  border-radius: 3rpx;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.15));
+}
+
+/* 资源库：文件夹 */
+.icon-resources {
+  position: relative;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.icon-resources-box {
+  position: absolute;
+  left: 6rpx;
+  top: 12rpx;
+  right: 6rpx;
+  bottom: 6rpx;
+  border-radius: 6rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.95);
+  box-sizing: border-box;
+}
+
+.icon-resources-line {
+  position: absolute;
+  left: 14rpx;
+  right: 14rpx;
+  height: 3rpx;
+  border-radius: 2rpx;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.icon-resources-line.l1 {
+  top: 20rpx;
+}
+
+.icon-resources-line.l2 {
+  top: 28rpx;
+}
+
 /* Serious：感叹号 */
 .icon-serious {
   position: relative;
@@ -1344,31 +1688,73 @@ function handleEntryTap(item) {
   background: rgba(255, 255, 255, 0.95);
 }
 
-/* 专攻：一点一线 */
-.icon-zhuanggong {
+/* 分身：人脸轮廓 */
+.icon-twin {
   position: relative;
   width: 44rpx;
   height: 44rpx;
 }
 
-.icon-zhuanggong-dot {
+.icon-twin-face {
+  position: absolute;
+  left: 8rpx;
+  top: 6rpx;
+  width: 28rpx;
+  height: 32rpx;
+  border-radius: 50% 50% 46% 46%;
+  border: 3rpx solid rgba(255, 255, 255, 0.95);
+  box-sizing: border-box;
+}
+
+.icon-twin-dot {
   position: absolute;
   left: 18rpx;
-  top: 6rpx;
+  top: 16rpx;
   width: 8rpx;
   height: 8rpx;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.95);
+  box-shadow: 10rpx 0 0 rgba(255, 255, 255, 0.95);
 }
 
-.icon-zhuanggong-line {
+/* 小黑：代码括号示意（不用模板里的花括号，避免编译成插值） */
+.icon-code {
+  position: relative;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.icon-code-left,
+.icon-code-right {
+  position: absolute;
+  top: 8rpx;
+  width: 12rpx;
+  height: 28rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.95);
+  box-sizing: border-box;
+}
+
+.icon-code-left {
+  left: 4rpx;
+  border-right: none;
+  border-radius: 8rpx 0 0 8rpx;
+}
+
+.icon-code-right {
+  right: 4rpx;
+  border-left: none;
+  border-radius: 0 8rpx 8rpx 0;
+}
+
+.icon-code-slash {
   position: absolute;
   left: 20rpx;
-  top: 18rpx;
-  width: 4rpx;
-  height: 20rpx;
+  top: 11rpx;
+  width: 3rpx;
+  height: 22rpx;
   border-radius: 2rpx;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.85);
+  transform: rotate(18deg);
 }
 
 .entry-name {

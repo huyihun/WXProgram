@@ -1,5 +1,6 @@
 import { createSSRApp } from 'vue'
 import App from './App.vue'
+import { setNavPageScrolled } from '@/utils/navScroll'
 
 /**
  * uni-app 应用入口
@@ -7,5 +8,14 @@ import App from './App.vue'
  */
 export function createApp() {
   const app = createSSRApp(App)
+  // onPageScroll 只在页面生效，用 mixin 统一喂给导航吸顶状态
+  app.mixin({
+    onShow() {
+      setNavPageScrolled(0)
+    },
+    onPageScroll(e) {
+      setNavPageScrolled(e && e.scrollTop)
+    },
+  })
   return { app }
 }

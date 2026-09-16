@@ -42,6 +42,13 @@ const modules = [
     path: '/pages/notebook/plan/index',
     iconClass: 'icon-plan',
   },
+  {
+    id: 'info',
+    name: '信息记录',
+    desc: '账号密码备忘',
+    path: '/pages/info/index',
+    iconClass: 'icon-info',
+  },
 ]
 
 function handleModuleTap(item) {
@@ -149,6 +156,30 @@ function handleModuleTap(item) {
   right: 6rpx;
   height: 3rpx;
   background: rgba(255, 255, 255, 0.7);
+}
+
+/* 信息记录：卡片线条 */
+.icon-info::before {
+  content: '';
+  position: absolute;
+  left: 4rpx;
+  top: 4rpx;
+  right: 4rpx;
+  bottom: 4rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.9);
+  border-radius: 6rpx;
+}
+
+.icon-info::after {
+  content: '';
+  position: absolute;
+  left: 10rpx;
+  top: 14rpx;
+  width: 16rpx;
+  height: 3rpx;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 2rpx;
+  box-shadow: 0 8rpx 0 rgba(255, 255, 255, 0.7);
 }
 
 .module-info {

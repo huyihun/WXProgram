@@ -31,7 +31,11 @@
       "style": {}
     },
     {
-      "path": "pages/zhuanggong/index",
+      "path": "pages/twin/index",
+      "style": {}
+    },
+    {
+      "path": "pages/info/index",
       "style": {}
     },
     {
@@ -79,9 +83,49 @@
       "style": {}
     },
     {
+      "path": "pages/novel/shelf",
+      "style": {}
+    },
+    {
       "path": "pages/novel/read",
       "style": {
         "disableSwipeBack": true
+      }
+    },
+    {
+      "path": "pages/theater/index",
+      "style": {}
+    },
+    {
+      "path": "pages/theater/play",
+      "style": {
+        "disableSwipeBack": true
+      }
+    },
+    {
+      "path": "pages/wallpaper/index",
+      "style": {}
+    },
+    {
+      "path": "pages/resources/index",
+      "style": {}
+    },
+    {
+      "path": "pages/resources/resume/index",
+      "style": {}
+    },
+    {
+      "path": "pages/resources/ideas/index",
+      "style": {}
+    },
+    {
+      "path": "pages/resources/ideas/read",
+      "style": {}
+    },
+    {
+      "path": "pages/code-assist/index",
+      "style": {
+        "disableScroll": true
       }
     }
   ],

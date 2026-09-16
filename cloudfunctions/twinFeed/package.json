@@ -1,0 +1,12 @@
+{
+  "name": "twinFeed",
+  "version": "1.0.0",
+  "description": "分身投喂：资料解析 + AI 消化",
+  "main": "index.js",
+  "dependencies": {
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1",
+    "wx-server-sdk": "~2.6.3",
+    "xlsx": "^0.18.5"
+  }
+}

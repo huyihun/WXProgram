@@ -184,3 +184,8 @@ export async function completeActiveFocus(id) {
 export async function getHistoryFocus() {
   return fetchAllWhere({ kind: 'focus', status: 'done' }, 'completedAt', 'desc')
 }
+
+export async function removeHistoryFocus(id) {
+  if (!id) throw new Error('缺少记录')
+  await db.collection(COL).doc(id).remove()
+}
