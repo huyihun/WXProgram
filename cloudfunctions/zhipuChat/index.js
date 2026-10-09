@@ -2,16 +2,20 @@
  * 智谱对话（密钥仅存云函数环境变量 ZHIPU_API_KEY）
  *
  * Coding Plan Key 须走 /api/coding/paas/v4（不是通用 /api/paas/v4）
- * 入参：{ messages: [{ role, content }], imageBase64?, imageMime? }
+ * 入参：{ messages: [{ role, content }], imageCdn?, imageBase64?, imageMime? }
  * 出参：{ ok, reply } 或 { ok:false, message }
  * 模型固定 glm-5.3；时效问题按需走套餐 MCP 联网搜索
  */
 const cloud = require('wx-server-sdk')
+const http = require('http')
 const https = require('https')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
 const MODEL = 'glm-5.3'
+/** CDN 传图下载限制（与 codeAssistChat 同款：8s 超时、3MB 上限） */
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 8000
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024
 /** Coding Plan 专用通道（与通用 /api/paas/v4 额度不共用） */
 const API_HOST = 'open.bigmodel.cn'
 const API_PATH = '/api/coding/paas/v4/chat/completions'
@@ -390,6 +394,79 @@ function buildSystemPrompt(searchDigest, twinOpts) {
   return s
 }
 
+/**
+ * CDN 传图下载（与 codeAssistChat 同款实现）：
+ * 客户端 wx.cloud.CDN 对象到云函数侧已解析为临时 https URL
+ */
+function fetchUrlBuffer(url, timeoutMs) {
+  const isHttps = url.indexOf('https://') === 0
+  const isHttp = url.indexOf('http://') === 0
+  if (!isHttps && !isHttp) {
+    return Promise.reject(new Error('无效的图片地址'))
+  }
+  const client = isHttps ? https : http
+  return new Promise(function (resolve, reject) {
+    const req = client.get(url, function (res) {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        fetchUrlBuffer(res.headers.location, timeoutMs).then(resolve).catch(reject)
+        return
+      }
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        reject(new Error('下载图片失败(' + res.statusCode + ')'))
+        return
+      }
+      const chunks = []
+      let total = 0
+      res.on('data', function (c) {
+        total += c.length
+        if (total > MAX_IMAGE_BYTES) {
+          req.destroy()
+          reject(new Error('图片过大，请换一张或裁剪后再试'))
+          return
+        }
+        chunks.push(c)
+      })
+      res.on('end', function () {
+        resolve(Buffer.concat(chunks))
+      })
+    })
+    req.on('error', reject)
+    req.setTimeout(timeoutMs || IMAGE_DOWNLOAD_TIMEOUT_MS, function () {
+      req.destroy(new Error('下载图片超时'))
+    })
+  })
+}
+
+function fetchCdnImage(url, timeoutMs) {
+  if (url.indexOf('http://') === 0) {
+    // 先按 https 试，失败再回退 http
+    return fetchUrlBuffer('https://' + url.slice(7), timeoutMs).catch(function () {
+      return fetchUrlBuffer(url, timeoutMs)
+    })
+  }
+  return fetchUrlBuffer(url, timeoutMs)
+}
+
+/** 图片解析：优先 CDN 通道下载；否则用旧 imageBase64 入参 */
+async function resolveImageFromEvent(event) {
+  const mime = (event && event.imageMime) || 'image/jpeg'
+  const cdn = event && event.imageCdn != null ? String(event.imageCdn).trim() : ''
+  if (cdn) {
+    try {
+      const buf = await fetchCdnImage(cdn, IMAGE_DOWNLOAD_TIMEOUT_MS)
+      return { base64: buf.toString('base64'), mime: mime }
+    } catch (e) {
+      return { error: '图片加载失败：' + ((e && e.message) || '未知错误') }
+    }
+  }
+  const legacyBase64 =
+    event && event.imageBase64 != null ? String(event.imageBase64).trim() : ''
+  if (legacyBase64.length > 4000000) {
+    return { error: '图片过大，请换一张或裁剪后再试' }
+  }
+  return { base64: legacyBase64, mime: mime }
+}
+
 exports.main = async (event) => {
   const apiKey = process.env.ZHIPU_API_KEY || ''
   if (!apiKey) {
@@ -407,14 +484,13 @@ exports.main = async (event) => {
     styleText: event && event.styleText ? String(event.styleText).slice(0, 2000) : '',
   }
 
-  const imageBase64 =
-    event && event.imageBase64 != null ? String(event.imageBase64).trim() : ''
-  const imageMime =
-    (event && event.imageMime) || 'image/jpeg'
-  const hasImage = imageBase64.length > 0
-  if (imageBase64.length > 4000000) {
-    return { ok: false, message: '图片过大，请换一张或裁剪后再试' }
+  const image = await resolveImageFromEvent(event)
+  if (image.error) {
+    return { ok: false, message: image.error }
   }
+  const imageBase64 = image.base64
+  const imageMime = image.mime
+  const hasImage = imageBase64.length > 0
 
   let messages = normalizeMessages(event && event.messages, hasImage)
   if (!messages.length && hasImage) {

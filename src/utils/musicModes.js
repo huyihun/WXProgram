@@ -13,6 +13,7 @@ export const MUSIC_MODE_DY = 'dy'
 export const MUSIC_MODE_ALIN = 'alin'
 export const MUSIC_MODE_GT = 'gt'
 export const MUSIC_MODE_BLIND = 'blind'
+export const MUSIC_MODE_Y10 = 'y10'
 
 export const VALID_MUSIC_MODES = [
   MUSIC_MODE_FLAC,
@@ -24,6 +25,7 @@ export const VALID_MUSIC_MODES = [
   MUSIC_MODE_DY,
   MUSIC_MODE_ALIN,
   MUSIC_MODE_GT,
+  MUSIC_MODE_Y10,
   MUSIC_MODE_BLIND,
   MUSIC_MODE_VIP,
 ]
@@ -98,6 +100,14 @@ export const MODE_META = {
     label: 'GT',
     badge: 'GT',
     desc: '精选曲目',
+    master: false,
+    wifiOnly: false,
+    cover: '/static/juluo.jpg',
+  },
+  y10: {
+    label: '10月',
+    badge: '10月',
+    desc: '十月精选',
     master: false,
     wifiOnly: false,
     cover: '/static/juluo.jpg',

@@ -172,7 +172,8 @@ async function saveAnswer() {
   left: 0;
   right: 0;
   bottom: 0;
-  max-height: 76vh;
+  /* 显式高度：真机 max-height+flex 组合会塌陷导致弹框弹不起来 */
+  height: 76vh;
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, #201a2e 0%, #161221 100%);

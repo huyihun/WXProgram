@@ -22,6 +22,7 @@ import { XUSONG_PLAYLIST } from '@/utils/xusongPlaylist'
 import { DY_PLAYLIST } from '@/utils/dyPlaylist'
 import { ALIN_PLAYLIST } from '@/utils/alinPlaylist'
 import { GT_PLAYLIST } from '@/utils/gtPlaylist'
+import { Y10_PLAYLIST } from '@/utils/y10Playlist'
 import { BLIND_PLAYLIST } from '@/utils/blindPlaylist'
 import {
   MUSIC_MODE_VIP,
@@ -34,6 +35,7 @@ import {
   MUSIC_MODE_DY,
   MUSIC_MODE_ALIN,
   MUSIC_MODE_GT,
+  MUSIC_MODE_Y10,
   MUSIC_MODE_BLIND,
   normalizeMusicMode,
 } from '@/utils/musicModes'
@@ -49,6 +51,7 @@ export {
   MUSIC_MODE_DY,
   MUSIC_MODE_ALIN,
   MUSIC_MODE_GT,
+  MUSIC_MODE_Y10,
   MUSIC_MODE_BLIND,
 }
 
@@ -405,6 +408,7 @@ export function getPlaylistByMode(mode) {
   map[MUSIC_MODE_DY] = DY_PLAYLIST
   map[MUSIC_MODE_ALIN] = ALIN_PLAYLIST
   map[MUSIC_MODE_GT] = GT_PLAYLIST
+  map[MUSIC_MODE_Y10] = Y10_PLAYLIST
   map[MUSIC_MODE_BLIND] = BLIND_PLAYLIST
   const list = map[m] || FLAC_PLAYLIST
   return withMusicPrefs(list, m)

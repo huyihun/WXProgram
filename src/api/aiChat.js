@@ -43,6 +43,12 @@ function getDb() {
   return wx.cloud.database()
 }
 
+/** wx.cloud.CDN 工厂（仅微信端可用；不可用返回 null） */
+function cloudCdn() {
+  if (typeof wx !== 'undefined' && wx.cloud && wx.cloud.CDN) return wx.cloud.CDN
+  return null
+}
+
 /** 读默认大模型：本地缓存优先，再拉云；无记录则智谱 */
 export async function getAiDefaultProvider() {
   const local = readLocalProvider()
@@ -100,15 +106,25 @@ export async function chatWithAi(messages, provider, imageOpts) {
 
   let imageBase64 = opts.imageBase64 || ''
   const imageMime = opts.mime || 'image/jpeg'
-  if (!imageBase64 && opts.localPath) {
-    imageBase64 = await readFileBase64(opts.localPath)
-  }
-
   const name = id === 'minimax' ? 'minimaxChat' : 'zhipuChat'
   const data = { messages: messages || [] }
-  if (imageBase64) {
-    data.imageBase64 = imageBase64
+  if (hasImage) {
     data.imageMime = imageMime
+    const cdnFactory = cloudCdn()
+    if (opts.localPath && cdnFactory) {
+      // 小黑同款 CDN 通道：图片不进 callFunction data，无体积限制，
+      // 云函数侧收到临时 URL 自行下载转 base64
+      data.imageCdn = cdnFactory({ type: 'filePath', filePath: opts.localPath })
+    } else {
+      // 回退 base64：callFunction data 有上限，压缩后仍超限提前报可懂的错
+      if (!imageBase64 && opts.localPath) {
+        imageBase64 = await readFileBase64(opts.localPath)
+      }
+      if (imageBase64.length > 900000) {
+        throw new Error('图片过大，请换一张小图或截图后再试')
+      }
+      data.imageBase64 = imageBase64
+    }
   }
   if (opts.mode) data.mode = opts.mode
   if (opts.personaText) data.personaText = String(opts.personaText).slice(0, 6000)
@@ -152,6 +168,14 @@ export function formatAiChatError(err) {
     return {
       tip: '内容未通过安全审核，请换个说法，或切换到 MiniMax 再试',
       toast: '未通过安全审核',
+    }
+  }
+  if (
+    /exceed max size|payload|too large|413|maximum/i.test(msg)
+  ) {
+    return {
+      tip: '内容或图片过大，请换一张小图、精简文字后再试',
+      toast: '内容过大',
     }
   }
   if (!msg) {

@@ -5,10 +5,10 @@
       <image v-if="themeBgUrl" class="ai-bg" :src="themeBgUrl" mode="aspectFill" />
       <view class="ai-bg-mask" />
 
-      <view class="sheet-handle" />
-      <view class="panel-header">
+      <view class="sheet-handle" @touchstart="onHeadTouchStart" @touchmove="onHeadTouchMove" />
+      <view class="panel-head" @touchstart="onHeadTouchStart" @touchmove="onHeadTouchMove">
         <view class="head-left">
-          <text class="panel-title">{{ twin ? '分身对谈' : '问道' }}</text>
+          <text v-if="!twin" class="panel-title">问道</text>
           <view v-if="!twin" class="provider-row">
             <view
               v-for="p in AI_PROVIDERS"
@@ -21,7 +21,7 @@
             </view>
           </view>
         </view>
-        <text class="panel-close" @tap="emit('close')">关闭</text>
+        <text v-if="!twin" class="panel-close" @tap="emit('close')">关闭</text>
       </view>
 
       <view class="chat-body">
@@ -156,7 +156,7 @@
               :maxlength="2000"
               :show-confirm-bar="false"
               confirm-type="send"
-              placeholder="写下你的疑惑，或上传截图"
+              :placeholder="twin ? '' : '写下你的疑惑，或上传截图'"
               placeholder-class="ph"
               :adjust-position="false"
               :cursor-spacing="12"
@@ -211,22 +211,8 @@ import {
   getAiDefaultProvider,
   setAiDefaultProvider,
 } from '@/api/aiChat'
-import {
-  addMemoryUnique,
-  getAvatar,
-  getPersona,
-  getStatus,
-  listMemories,
-  loadChat,
-  saveChat,
-  saveStatus,
-  formatPersonaText,
-  formatStatusText,
-  formatMemoryDigest,
-  looksLikeFactOrCorrection,
-  shouldUpdateNextActions,
-} from '@/api/aiTwin'
-import { buildStyleText } from '@/api/twinProfile'
+import { loadChat, saveChat } from '@/api/aiTwin'
+import { applyAvatarMarker, buildTwinContext, recordTwinFacts } from '@/api/twinChat'
 import XiaoheiThinking from '@/code-assist/components/Thinking.vue'
 import XiaoheiImageIcon from '@/code-assist/components/ImageIcon.vue'
 import XiaoheiMicIcon from '@/code-assist/components/MicIcon.vue'
@@ -253,7 +239,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'replied'])
 
 const messages = ref([])
 const draft = ref('')
@@ -309,6 +295,9 @@ watch(
       bindKeyboard()
       nextTick(function () {
         scrollToEnd()
+        // 面板刚挂载时 scroll-into-view 在真机常不生效，延迟补滚
+        setTimeout(scrollToEnd, 150)
+        setTimeout(scrollToEnd, 400)
       })
       return
     }
@@ -349,37 +338,6 @@ async function loadDefaultProvider() {
 }
 
 /** 每次发送前实时拉取，刚投喂消化的记忆立即生效 */
-let twinAvatarFileID = ''
-
-const AVATAR_PROTOCOL =
-  '你有一张当前形象照片。当用户想看你的照片、形象时，单独输出一行【展示形象】表示把照片发出去，其余文字照常。'
-
-const AVATAR_MARKER_RE = /[\[【]展示形象[\]】]/
-
-/** 回复含展示形象标记：剔除标记；有形象照时把 fileID 挂到消息上 */
-function applyAvatarMarker(reply) {
-  const text = String(reply || '')
-  if (!AVATAR_MARKER_RE.test(text) || !twinAvatarFileID) return { text: text, imageUrl: '' }
-  const cleaned = text.replace(AVATAR_MARKER_RE, '').replace(/\n{2,}/g, '\n').trim()
-  return { text: cleaned || '这就是我现在的形象。', imageUrl: twinAvatarFileID }
-}
-
-async function buildTwinContext() {
-  const opts = { mode: 'twin' }
-  try {
-    const parts = await Promise.all([getPersona(), getStatus(), listMemories(), getAvatar()])
-    opts.personaText = formatPersonaText(parts[0])
-    opts.statusText = formatStatusText(parts[1])
-    opts.memoryDigest = formatMemoryDigest(parts[2])
-    opts.styleText = buildStyleText(parts[2])
-    twinAvatarFileID = parts[3] && parts[3].mainFileID ? parts[3].mainFileID : ''
-    opts.avatarDesc = twinAvatarFileID ? AVATAR_PROTOCOL : ''
-  } catch (err) {
-    console.warn('分身上下文加载失败', err)
-  }
-  return opts
-}
-
 async function loadTwinHistory() {
   try {
     const list = await loadChat()
@@ -388,6 +346,9 @@ async function loadTwinHistory() {
       return { role: m.role, content: m.content }
     })
     scrollToEnd()
+    // 面板刚挂载时 scroll-into-view 在真机常不生效，延迟补滚
+    setTimeout(scrollToEnd, 150)
+    setTimeout(scrollToEnd, 400)
   } catch (err) {
     console.warn('分身对话历史加载失败', err)
   }
@@ -397,24 +358,6 @@ function persistTwinChat() {
   saveChat(messagesForApi()).catch(function (err) {
     console.warn('分身对话保存失败', err)
   })
-}
-
-/** 对话是投喂之外的第二条吸收通道：事实/纠正写入长期记忆，行程写入状态；不阻塞回复 */
-async function recordTwinFacts(text) {
-  const t = (text || '').trim()
-  if (!t) return
-  try {
-    if (looksLikeFactOrCorrection(t)) {
-      const mem = await listMemories()
-      await addMemoryUnique(t, mem)
-    }
-    if (shouldUpdateNextActions(t)) {
-      const s = await getStatus()
-      await saveStatus(Object.assign({}, s, { nextActions: t }))
-    }
-  } catch (err) {
-    console.warn('分身记忆写入失败', err)
-  }
 }
 
 async function selectProvider(id) {
@@ -478,6 +421,24 @@ function clearDraft() {
 
 function clearPendingImage() {
   pendingImage.value = null
+}
+
+/** twin 模式：顶部区域下滑收起弹框 */
+let headSwipeStartY = 0
+
+function onHeadTouchStart(e) {
+  if (!props.twin) return
+  const t = e.touches && e.touches[0]
+  headSwipeStartY = t ? t.clientY : 0
+}
+
+function onHeadTouchMove(e) {
+  if (!props.twin || !headSwipeStartY) return
+  const t = e.touches && e.touches[0]
+  if (t && t.clientY - headSwipeStartY > 60) {
+    headSwipeStartY = 0
+    emit('close')
+  }
 }
 
 function pickImage() {
@@ -618,7 +579,10 @@ async function handleSend() {
     const msg = buildAssistantMsg(out)
     if (photoUrl) msg.imageUrl = photoUrl
     messages.value.push(msg)
-    if (props.twin) persistTwinChat()
+    if (props.twin) {
+      persistTwinChat()
+      emit('replied', out)
+    }
   } catch (err) {
     if (seq !== chatSeq) return
     const formatted = formatAiChatError(err)

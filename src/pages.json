@@ -1,6 +1,12 @@
 {
   "pages": [
     {
+      "path": "pages/stage/launch/index",
+      "style": {
+        "disableScroll": true
+      }
+    },
+    {
       "path": "pages/index/index",
       "style": {
         "disableScroll": true
@@ -127,6 +133,10 @@
       "style": {
         "disableScroll": true
       }
+    },
+    {
+      "path": "pages/album/index",
+      "style": {}
     }
   ],
   "globalStyle": {
@@ -142,5 +152,18 @@
       "^PageRoot$": "@/components/PageRoot.vue",
       "^PageLoading$": "@/components/PageLoading.vue"
     }
-  }
+  },
+  "subPackages": [
+    {
+      "root": "packageTwin",
+      "pages": [
+        {
+          "path": "pages/stage/index",
+          "style": {
+            "disableScroll": true
+          }
+        }
+      ]
+    }
+  ]
 }

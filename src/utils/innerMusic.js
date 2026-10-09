@@ -31,6 +31,7 @@ import { XUSONG_PLAYLIST } from '@/utils/xusongPlaylist'
 import { DY_PLAYLIST } from '@/utils/dyPlaylist'
 import { ALIN_PLAYLIST } from '@/utils/alinPlaylist'
 import { GT_PLAYLIST } from '@/utils/gtPlaylist'
+import { Y10_PLAYLIST } from '@/utils/y10Playlist'
 import { BLIND_PLAYLIST } from '@/utils/blindPlaylist'
 import {
   getDefaultMusicMode,
@@ -48,6 +49,7 @@ import {
   MUSIC_MODE_DY,
   MUSIC_MODE_ALIN,
   MUSIC_MODE_GT,
+  MUSIC_MODE_Y10,
   MUSIC_MODE_BLIND,
   normalizeMusicMode,
   isMasterMusicMode,
@@ -67,6 +69,7 @@ export {
   MUSIC_MODE_DY,
   MUSIC_MODE_ALIN,
   MUSIC_MODE_GT,
+  MUSIC_MODE_Y10,
   MUSIC_MODE_BLIND,
   normalizeMusicMode,
   isMasterMusicMode,
@@ -88,6 +91,7 @@ RAW_BY_MODE[MUSIC_MODE_ZM] = ZM_PLAYLIST
 RAW_BY_MODE[MUSIC_MODE_DY] = DY_PLAYLIST
 RAW_BY_MODE[MUSIC_MODE_ALIN] = ALIN_PLAYLIST
 RAW_BY_MODE[MUSIC_MODE_GT] = GT_PLAYLIST
+RAW_BY_MODE[MUSIC_MODE_Y10] = Y10_PLAYLIST
 RAW_BY_MODE[MUSIC_MODE_BLIND] = BLIND_PLAYLIST
 
 export const PLAY_MODE_SEQ = 'seq'

@@ -121,6 +121,29 @@ async function deleteCloudFile(fileID) {
   return { ok: !!ok, msg: msg || '' }
 }
 
+/** 相册删除：仅主人，仅 /album/ 目录（App 内上传的照片） */
+async function albumDelete(event) {
+  const wxContext = cloud.getWXContext()
+  const openid = wxContext && wxContext.OPENID
+  if (!isOwnerOpenId(openid)) {
+    return { ok: false, errMsg: '无权限' }
+  }
+
+  const fileID = String((event && event.fileID) || '')
+  if (!fileID) {
+    return { ok: false, errMsg: '缺少参数' }
+  }
+  if (fileID.indexOf('/album/') < 0) {
+    return { ok: false, errMsg: '仅支持相册目录' }
+  }
+
+  const del = await deleteCloudFile(fileID)
+  if (!del.ok) {
+    return { ok: false, errMsg: del.msg || '删除失败' }
+  }
+  return { ok: true }
+}
+
 async function wallpaperDelete(event) {
   const wxContext = cloud.getWXContext()
   const openid = wxContext && wxContext.OPENID
@@ -199,6 +222,11 @@ exports.main = async (event) => {
   // 壁纸删除：不要求走通用 fileID 白名单入口以外的逻辑，但仍校验路径
   if (event && event.action === 'wallpaperDelete') {
     return wallpaperDelete(event)
+  }
+
+  // 相册删除：主人删自己上传的照片（仅 /album/）
+  if (event && event.action === 'albumDelete') {
+    return albumDelete(event)
   }
 
   const fileID = event && event.fileID

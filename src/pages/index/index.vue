@@ -85,6 +85,10 @@
                     <view class="icon-twin-face" />
                     <view class="icon-twin-dot" />
                   </view>
+                  <view v-else-if="item.id === 'album'" class="icon-album">
+                    <view class="fa-back" />
+                    <view class="fa-front" />
+                  </view>
                   <view v-else-if="item.id === 'codeAssist'" class="icon-code">
                     <view class="icon-code-left" />
                     <view class="icon-code-slash" />
@@ -354,6 +358,13 @@ const twinEntry = {
   path: '/pages/twin/index',
 }
 
+const albumEntry = {
+  id: 'album',
+  name: '相册',
+  desc: '照片云存档',
+  path: '/pages/album/index',
+}
+
 const codeAssistEntry = {
   id: 'codeAssist',
   name: '小黑',
@@ -433,7 +444,7 @@ const entrySections = computed(() => {
       id: 'personal',
       title: '个人',
       sub: 'PERSONAL',
-      items: [seriousEntry, dietEntry, hushenEntry, twinEntry, codeAssistEntry],
+      items: [seriousEntry, dietEntry, hushenEntry, twinEntry, albumEntry, codeAssistEntry],
     })
   }
 
@@ -1715,6 +1726,37 @@ function handleEntryTap(item) {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.95);
   box-shadow: 10rpx 0 0 rgba(255, 255, 255, 0.95);
+}
+
+/* 相册：双层相框 */
+.icon-album {
+  position: relative;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.icon-album .fa-back {
+  position: absolute;
+  left: 4rpx;
+  top: 6rpx;
+  width: 30rpx;
+  height: 26rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.6);
+  border-radius: 6rpx;
+  transform: rotate(-8deg);
+  box-sizing: border-box;
+}
+
+.icon-album .fa-front {
+  position: absolute;
+  left: 12rpx;
+  top: 13rpx;
+  width: 30rpx;
+  height: 26rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.95);
+  border-radius: 6rpx;
+  background: rgba(255, 255, 255, 0.18);
+  box-sizing: border-box;
 }
 
 /* 小黑：代码括号示意（不用模板里的花括号，避免编译成插值） */

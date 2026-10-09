@@ -166,25 +166,67 @@ export async function getActiveProject() {
   return rows[0] || null
 }
 
-/** 识图前压缩，避免 callFunction 1MB 上限 */
-export function compressImageForChat(filePath) {
+/**
+ * 识图前压缩：callFunction data 有上限（base64 超限会报 data exceed max size），
+ * 渐进降质降尺寸循环，直到字节数达标；全档仍超标则返回最小档兜底
+ */
+const CHAT_IMG_MAX_BYTES = 520 * 1024
+const CHAT_IMG_STEPS = [
+  { quality: 60, width: 1024 },
+  { quality: 45, width: 820 },
+  { quality: 30, width: 640 },
+]
+
+function compressOnce(src, quality, width) {
   return new Promise(function (resolve) {
-    if (!filePath) {
-      resolve('')
-      return
-    }
     uni.compressImage({
-      src: filePath,
-      quality: 70,
-      compressedWidth: 1280,
+      src: src,
+      quality: quality,
+      compressedWidth: width,
       success: function (res) {
-        resolve(res.tempFilePath || filePath)
+        resolve(res.tempFilePath || '')
       },
       fail: function () {
-        resolve(filePath)
+        resolve('')
       },
     })
   })
+}
+
+function fileByteLength(filePath) {
+  return new Promise(function (resolve) {
+    if (!filePath) {
+      resolve(0)
+      return
+    }
+    uni.getFileSystemManager().readFile({
+      filePath: filePath,
+      success: function (res) {
+        const data = (res && res.data) || ''
+        if (data && data.byteLength != null) resolve(data.byteLength)
+        else resolve(String(data).length)
+      },
+      fail: function () {
+        resolve(0)
+      },
+    })
+  })
+}
+
+export async function compressImageForChat(filePath) {
+  if (!filePath) return ''
+  let current = filePath
+  let size = await fileByteLength(current)
+  if (size > 0 && size <= CHAT_IMG_MAX_BYTES) return current
+  for (let i = 0; i < CHAT_IMG_STEPS.length; i++) {
+    const step = CHAT_IMG_STEPS[i]
+    const out = await compressOnce(current, step.quality, step.width)
+    if (!out) break
+    current = out
+    size = await fileByteLength(current)
+    if (size > 0 && size <= CHAT_IMG_MAX_BYTES) return current
+  }
+  return current
 }
 
 function wrapImageCdn(localPath) {
