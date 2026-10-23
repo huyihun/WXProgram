@@ -1,5 +1,5 @@
 <template>
-  <PageRoot :back="false" flush fill :extra-style="shellExtraStyle">
+  <PageRoot hide-nav no-mood-bg :back="false" flush fill :extra-style="shellExtraStyle">
     <!-- 加载/失败时也用箭头返回，避免再出现蓝底「返回」 -->
     <view
       v-if="booting || loadError"
@@ -21,6 +21,7 @@
       :class="'theme-' + themeId"
       :style="readerVars"
     >
+      <!-- 常驻返回：一点退出阅读，无需先开菜单 -->
       <view
         class="reader-back reader-back--float"
         :class="{ 'is-chrome': chromeOpen }"
@@ -40,7 +41,7 @@
         @tap="onBodyTap"
       >
         <!-- 常态单页 -->
-        <view v-if="!flipActive" class="page-sheet">
+        <view v-if="!flipActive" class="page-sheet" :style="pageSheetPadStyle">
           <text v-if="currentPage.showTitle" class="in-chap-title">{{ chapterTitle }}</text>
           <text class="reader-body" user-select>{{ currentPage.text }}</text>
           <view v-if="currentPage.showEnd" class="chap-end">
@@ -54,7 +55,7 @@
 
         <!-- 横向翻页：当前页滑出 + 目标页滑入 -->
         <view v-else class="flip-stage" :class="'dir-' + turnDir + (flipRun ? ' is-run' : '')">
-          <view class="page-sheet flip-back">
+          <view class="page-sheet flip-back" :style="pageSheetPadStyle">
             <text v-if="backPage.showTitle" class="in-chap-title">{{ backPage.title }}</text>
             <text class="reader-body">{{ backPage.text }}</text>
             <view v-if="backPage.showEnd" class="chap-end">
@@ -65,7 +66,7 @@
               <text class="page-foot-text">{{ backPage.foot }}</text>
             </view>
           </view>
-          <view class="page-sheet flip-front">
+          <view class="page-sheet flip-front" :style="pageSheetPadStyle">
             <text v-if="frontPage.showTitle" class="in-chap-title">{{ frontPage.title }}</text>
             <text class="reader-body">{{ frontPage.text }}</text>
             <view v-if="frontPage.showEnd" class="chap-end">
@@ -84,7 +85,12 @@
       </view>
 
       <!-- 顶栏 -->
-      <view class="chrome-top" :class="{ show: chromeOpen }" @tap.stop>
+      <view
+        class="chrome-top"
+        :class="{ show: chromeOpen }"
+        :style="chromeTopPadStyle"
+        @tap.stop
+      >
         <text class="chrome-book">{{ meta.title || '' }}</text>
         <text class="chrome-chap">{{ chapterTitle }}</text>
         <text class="chrome-meta">
@@ -93,33 +99,17 @@
         </text>
       </view>
 
-      <!-- 底栏：上一页 / 目录 / 设置 / 下一页 -->
+      <!-- 底栏：目录 / 设置（翻页用左右点按或滑动） -->
       <view class="chrome-bottom" :class="{ show: chromeOpen }" @tap.stop>
         <view class="progress-track">
           <view class="progress-fill" :style="{ width: bookPct + '%' }" />
         </view>
         <view class="chrome-actions">
-          <view
-            class="chrome-btn ghost"
-            :class="{ disabled: !canGoPrev }"
-            hover-class="chrome-btn--active"
-            @tap="goPrevPage"
-          >
-            <text class="chrome-btn-text">上一页</text>
-          </view>
           <view class="chrome-btn" hover-class="chrome-btn--active" @tap="openToc">
             <text class="chrome-btn-text">目录</text>
           </view>
           <view class="chrome-btn" hover-class="chrome-btn--active" @tap="openSettings">
             <text class="chrome-btn-text">设置</text>
-          </view>
-          <view
-            class="chrome-btn ghost"
-            :class="{ disabled: !canGoNext }"
-            hover-class="chrome-btn--active"
-            @tap="goNextPage"
-          >
-            <text class="chrome-btn-text">下一页</text>
           </view>
         </view>
       </view>
@@ -208,12 +198,14 @@ import {
   getCachedChapter,
   getCachedBook,
   getNovelProgress,
+  getNovelProgressPage,
   setNovelProgress,
+  flushNovelProgressSync,
   normalizeShelf,
 } from '@/api/novel'
 
 const PREFS_KEY = 'novelReaderPrefs'
-const TIP_KEY = 'novelReaderTipShown_v3'
+const TIP_KEY = 'novelReaderTipShown_v4'
 const FONT_MIN = 28
 const FONT_MAX = 44
 const FONT_STEP = 4
@@ -222,8 +214,8 @@ const EDGE_RATIO = 0.32
 const FLIP_MS = 340
 const SWIPE_MIN = 48
 const PAD_X_RPX = 40
-const PAD_TOP_RPX = 28
-const PAD_BOTTOM_RPX = 72
+const PAD_BOTTOM_RPX = 48
+const CONTENT_TOP_GAP = 8
 const TITLE_BLOCK_RPX = 54
 const END_BLOCK_RPX = 100
 
@@ -270,6 +262,7 @@ const themeId = ref('night')
 const animating = ref(false)
 const statusBarHeight = ref(20)
 const navBarHeight = ref(44)
+const menuButtonBottom = ref(64)
 const windowWidth = ref(375)
 const windowHeight = ref(667)
 
@@ -303,15 +296,26 @@ const pageFootText = computed(() => {
   return chapterIndex.value + ' · ' + (pageIndex.value + 1) + '/' + pageCount.value
 })
 
-const canGoPrev = computed(() => chapterIndex.value > 1 || pageIndex.value > 0)
-const canGoNext = computed(() => {
-  if (pageIndex.value < pageCount.value - 1) return true
-  return chapterIndex.value < chapterCount.value
+/** 正文顶距：胶囊底 + 间隙，避开右上角菜单 */
+const contentTopPx = computed(() => {
+  return menuButtonBottom.value + CONTENT_TOP_GAP
 })
 
 const readerBackStyle = computed(() => {
   const top = statusBarHeight.value + (navBarHeight.value - 32) / 2
   return { top: (top > 0 ? top : statusBarHeight.value + 6) + 'px' }
+})
+
+const pageSheetPadStyle = computed(() => {
+  return {
+    paddingTop: contentTopPx.value + 'px',
+  }
+})
+
+const chromeTopPadStyle = computed(() => {
+  return {
+    paddingTop: statusBarHeight.value + 8 + 'px',
+  }
 })
 
 const lineHeight = computed(() => {
@@ -401,16 +405,34 @@ function syncSystemInfo() {
     if (menuButton && menuButton.height) {
       navBarHeight.value =
         (menuButton.top - (info.statusBarHeight || 0)) * 2 + menuButton.height
+      menuButtonBottom.value =
+        menuButton.bottom || statusBarHeight.value + navBarHeight.value
+    } else {
+      menuButtonBottom.value = statusBarHeight.value + navBarHeight.value
     }
   } catch (e) {
-    // ignore
+    menuButtonBottom.value = statusBarHeight.value + navBarHeight.value
   }
 }
+
+onHide(() => {
+  flushNovelProgressSync()
+})
 
 onUnload(() => {
   clearChromeTimer()
   stopFlipAnim()
+  flushNovelProgressSync()
 })
+
+// 章内翻页即时记录页码（页级进度）
+watch(
+  () => pageIndex.value,
+  (p) => {
+    if (!bookId.value) return
+    setNovelProgress(bookId.value, chapterIndex.value, shelf.value, p + 1)
+  }
+)
 
 function emptyPageView() {
   return {
@@ -455,7 +477,13 @@ async function boot() {
     }
     const total = Number(book.chapterCount) || 0
     if (chapterIndex.value > total && total > 0) chapterIndex.value = total
-    applyChapter(chapterIndex.value, 0, false)
+    // 章内页级恢复：当前章与上次阅读章一致时，跳回上次翻到的页
+    let restorePage = 0
+    if (getNovelProgress(bookId.value, shelf.value) === chapterIndex.value) {
+      const savedPage = getNovelProgressPage(bookId.value, shelf.value)
+      if (savedPage > 1) restorePage = savedPage - 1
+    }
+    applyChapter(chapterIndex.value, restorePage, false)
     maybeShowTip()
   } catch (err) {
     console.error('打开书籍失败', err)
@@ -509,9 +537,9 @@ function maybeShowTip() {
     // ignore
   }
   uni.showToast({
-    title: '点右侧/左滑下页 · 点左侧/右滑上页 · 点中间菜单',
+    title: '左右点/滑翻页 · 中间菜单',
     icon: 'none',
-    duration: 3000,
+    duration: 2800,
   })
 }
 
@@ -619,9 +647,9 @@ function paginateChapter(content, title, opts) {
 }
 
 function getContentMetrics() {
-  const navH = statusBarHeight.value + navBarHeight.value
-  const stageH = Math.max(120, windowHeight.value - navH)
-  const contentHeightPx = stageH - rpx2px(PAD_TOP_RPX) - rpx2px(PAD_BOTTOM_RPX)
+  // 全屏沉浸：扣除胶囊下顶距与底边距，与 page-sheet 可见区一致
+  const stageH = Math.max(120, windowHeight.value)
+  const contentHeightPx = stageH - contentTopPx.value - rpx2px(PAD_BOTTOM_RPX)
   const contentWidthPx = windowWidth.value - rpx2px(PAD_X_RPX) * 2
   return { contentHeightPx, contentWidthPx }
 }
@@ -692,7 +720,7 @@ function applyChapter(index, targetPage, withAnim, dir) {
     chapterContent.value = nextContent
     pages.value = nextPages
     pageIndex.value = p
-    setNovelProgress(bookId.value, chapterIndex.value, shelf.value)
+    setNovelProgress(bookId.value, chapterIndex.value, shelf.value, p + 1)
   }
 
   if (!withAnim) {
@@ -990,7 +1018,10 @@ function setTheme(id) {
   right: 0;
   top: 0;
   bottom: 0;
-  padding: 28rpx 40rpx 72rpx;
+  /* padding-top 由 pageSheetPadStyle（胶囊底 + 间隙） */
+  padding-right: 40rpx;
+  padding-bottom: 48rpx;
+  padding-left: 40rpx;
   box-sizing: border-box;
   background: var(--reader-bg, #0c0e12);
   overflow: hidden;
@@ -1221,7 +1252,10 @@ function setTheme(id) {
 
 .chrome-top {
   top: 0;
-  padding: 16rpx 32rpx 20rpx;
+  /* padding-top 由 chromeTopPadStyle 含状态栏；左侧让开浮动返回 */
+  padding-right: 32rpx;
+  padding-bottom: 20rpx;
+  padding-left: 100rpx;
   transform: translateY(-12rpx);
   box-shadow: 0 8rpx 24rpx rgba(15, 45, 74, 0.08);
 }

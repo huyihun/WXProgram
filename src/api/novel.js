@@ -261,24 +261,165 @@ export function getCachedBook(bookId, shelf) {
   return bookCache[bookCacheKey(shelf, bookId)] || null
 }
 
-export function getNovelProgress(bookId, shelf) {
+/* ---------- 阅读进度：本地即时写 + 云端 novel_prefs 单文档同步 ---------- */
+const PROGRESS_CLOUD_COL = 'novel_prefs'
+const PROGRESS_SYNC_DELAY = 1500
+
+let progressCloudDocId = ''
+let progressCloudLoaded = false
+let progressSyncTimer = null
+let progressSyncDirty = false
+let progressSyncing = false
+
+function normalizeProgressEntry(raw) {
+  if (!raw) return null
+  if (typeof raw === 'object' && raw.chapter) {
+    return {
+      chapter: Number(raw.chapter) || 1,
+      page: Number(raw.page) || 1,
+      updatedAt: Number(raw.updatedAt) || 0,
+    }
+  }
+  const n = Number(raw)
+  if (isFinite(n) && n >= 1) return { chapter: n, page: 1, updatedAt: 0 }
+  return null
+}
+
+function readLocalProgressEntry(shelf, bookId) {
   try {
-    const raw = uni.getStorageSync(progressKey(shelf, bookId))
-    const n = Number(raw)
-    return isFinite(n) && n >= 1 ? n : 1
+    return normalizeProgressEntry(uni.getStorageSync(progressKey(shelf, bookId)))
   } catch (e) {
-    return 1
+    return null
   }
 }
 
-export function setNovelProgress(bookId, chapterIndex, shelf) {
-  const n = Number(chapterIndex)
-  if (!bookId || !isFinite(n) || n < 1) return
+function writeProgressByKey(key, entry) {
   try {
-    uni.setStorageSync(progressKey(shelf, bookId), n)
+    uni.setStorageSync(key, entry)
   } catch (e) {
     // ignore
   }
+}
+
+/** 枚举本地全部阅读进度（storage keys 前缀过滤） */
+function collectLocalProgress() {
+  let keys = []
+  try {
+    const info = uni.getStorageInfoSync()
+    keys = (info && info.keys) || []
+  } catch (e) {
+    return {}
+  }
+  const out = {}
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i]
+    if (!k || k.indexOf('novelProgress_') !== 0) continue
+    try {
+      const entry = normalizeProgressEntry(uni.getStorageSync(k))
+      if (entry) out[k] = entry
+    } catch (e) {
+      // ignore
+    }
+  }
+  return out
+}
+
+/** 拉取云端进度，按 updatedAt 新者胜合并回本地（跨设备/重装恢复） */
+export async function syncNovelProgressFromCloud() {
+  if (!wx.cloud || progressCloudLoaded) return
+  progressCloudLoaded = true
+  try {
+    const db = wx.cloud.database()
+    const res = await db.collection(PROGRESS_CLOUD_COL).limit(1).get()
+    const row = res.data && res.data[0]
+    if (!row) return
+    progressCloudDocId = row._id || ''
+    const cloudMap = row.progress || {}
+    const keys = Object.keys(cloudMap)
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i]
+      const c = normalizeProgressEntry(cloudMap[k])
+      if (!c || !k || k.indexOf('novelProgress_') !== 0) continue
+      let local = null
+      try {
+        local = normalizeProgressEntry(uni.getStorageSync(k))
+      } catch (e) {
+        local = null
+      }
+      if (!local || (Number(c.updatedAt) || 0) > (Number(local.updatedAt) || 0)) {
+        writeProgressByKey(k, c)
+      }
+    }
+  } catch (err) {
+    console.warn('[novel] 进度云拉取失败', err)
+  }
+}
+
+/** 云推送（防抖）：进度写入后自动触发 */
+function queueNovelProgressSync() {
+  progressSyncDirty = true
+  if (progressSyncTimer) return
+  progressSyncTimer = setTimeout(function () {
+    progressSyncTimer = null
+    flushNovelProgressSync()
+  }, PROGRESS_SYNC_DELAY)
+}
+
+/** 立即冲刷待同步进度（onHide/onUnload 时调用） */
+export function flushNovelProgressSync() {
+  if (progressSyncTimer) {
+    clearTimeout(progressSyncTimer)
+    progressSyncTimer = null
+  }
+  if (!progressSyncDirty || progressSyncing || !wx.cloud) return
+  progressSyncing = true
+  const progress = collectLocalProgress()
+  const db = wx.cloud.database()
+  const _ = db.command
+  const now = Date.now()
+  const run = progressCloudDocId
+    ? db
+        .collection(PROGRESS_CLOUD_COL)
+        .doc(progressCloudDocId)
+        .update({ data: { progress: _.set(progress), updatedAt: now } })
+    : db.collection(PROGRESS_CLOUD_COL).add({ data: { progress: progress, updatedAt: now } })
+  run
+    .then(function (res) {
+      if (res && res._id) progressCloudDocId = res._id
+      progressSyncDirty = false
+      progressSyncing = false
+    })
+    .catch(function (err) {
+      console.warn('[novel] 进度云同步失败', err)
+      progressSyncing = false
+    })
+}
+
+export function getNovelProgress(bookId, shelf) {
+  const e = readLocalProgressEntry(shelf, bookId)
+  return e && e.chapter >= 1 ? e.chapter : 1
+}
+
+/** 上次阅读停留在章内第几页（1 起） */
+export function getNovelProgressPage(bookId, shelf) {
+  const e = readLocalProgressEntry(shelf, bookId)
+  return e && Number(e.page) >= 1 ? Number(e.page) : 1
+}
+
+export function setNovelProgress(bookId, chapterIndex, shelf, page) {
+  const n = Number(chapterIndex)
+  if (!bookId || !isFinite(n) || n < 1) return
+  const entry = {
+    chapter: n,
+    page: Math.max(1, Number(page) || 1),
+    updatedAt: Date.now(),
+  }
+  try {
+    uni.setStorageSync(progressKey(shelf, bookId), entry)
+  } catch (e) {
+    // ignore
+  }
+  queueNovelProgressSync()
 }
 
 export function shelfCloudPrefix(shelf) {

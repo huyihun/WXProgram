@@ -3,35 +3,23 @@
     <view class="home-flip-viewport">
       <view class="home-stage">
         <view class="content content--vip" :style="contentPadStyle">
-          <!-- Hero：问候轻、语录主 -->
-          <view class="hero fade-in hero--vip">
-            <!-- <text class="greeting">{{ greeting }}</text> -->
+          <!-- 语录：导航正下方左对齐 -->
+          <view class="hero fade-in">
             <text id="homeHeroDesc" class="hero-desc">{{ healingQuote }}</text>
           </view>
 
-          <!-- 分类宫格：记录 / 休闲 -->
-          <view v-for="(section, sIndex) in entrySections" :key="section.id" class="entry-section">
-            <view class="section-head">
-              <view class="section-accent" />
-              <view class="section-title-wrap">
-                <text class="section-title">{{ section.title }}</text>
-                <text class="section-sub">{{ section.sub }}</text>
-              </view>
-              <view class="section-line" />
-            </view>
+          <!-- 分类宫格：留白隐分组 -->
+          <view v-for="section in entrySections" :key="section.id" class="entry-section fade-in">
             <view class="entry-list">
               <view
-                v-for="(item, index) in section.items"
+                v-for="item in section.items"
                 :key="item.id"
                 class="entry-card"
-                :class="'entry-delay-' + (section.id === 'personal' ? index : sIndex * 3 + index)"
+                :class="['size--' + item.size, 'tint--' + item.id]"
                 hover-class="entry-card--active"
                 @tap="handleEntryTap(item)"
               >
-                <view
-                  class="entry-icon-box"
-                  :class="{ 'entry-icon-box--tech': item.id === 'codeAssist' }"
-                >
+                <view class="entry-icon-box" :class="'ib--' + item.id">
                   <view v-if="item.id === 'notebook'" class="icon-notebook">
                     <view class="icon-notebook-spine" />
                     <view class="icon-notebook-page">
@@ -89,13 +77,19 @@
                     <view class="fa-back" />
                     <view class="fa-front" />
                   </view>
+                  <view v-else-if="item.id === 'theater'" class="icon-theater">
+                    <view class="icon-theater-tri" />
+                  </view>
                   <view v-else-if="item.id === 'codeAssist'" class="icon-code">
                     <view class="icon-code-left" />
                     <view class="icon-code-slash" />
                     <view class="icon-code-right" />
                   </view>
                 </view>
-                <text class="entry-name">{{ item.name }}</text>
+                <view class="entry-text">
+                  <text class="entry-name">{{ item.name }}</text>
+                  <text v-if="item.size !== 'mini' && item.desc" class="entry-desc">{{ item.desc }}</text>
+                </view>
               </view>
             </view>
           </view>
@@ -103,46 +97,6 @@
       </view>
     </view>
 
-    <!-- 右上角：天气坞，视频作坞内背景 -->
-    <view v-if="weather" class="weather-dock" :style="weatherDockStyle" @tap="toggleWeatherCity">
-      <video
-        v-if="weatherFxSrc"
-        id="weatherFxVideo"
-        class="weather-dock-video"
-        :src="weatherFxSrc"
-        :controls="false"
-        :show-center-play-btn="false"
-        :show-play-btn="false"
-        :show-fullscreen-btn="false"
-        :enable-progress-gesture="false"
-        :show-mute-btn="false"
-        object-fit="cover"
-        muted
-        loop
-        autoplay
-        @error="onWeatherFxError"
-      />
-      <view class="weather-dock-tint" />
-      <view class="weather-dock-body" :class="weatherTextClass">
-        <text class="weather-temp">{{ weatherTemp }}</text>
-        <view class="weather-cond">
-          <view class="wx-ico" :class="'ico-' + weatherIconKind" />
-          <text class="weather-cond-text">{{ weatherCondText }}</text>
-        </view>
-        <view class="weather-city-row">
-          <text class="weather-city">{{ weatherCity }}</text>
-          <view class="weather-toggle" :class="{ busy: weatherBusy }">
-            <view class="toggle-spin" :class="{ spin: weatherBusy }">
-              <view class="spin-arc spin-arc-a" />
-              <view class="spin-arc spin-arc-b" />
-              <view class="spin-tip tip-a" />
-              <view class="spin-tip tip-b" />
-            </view>
-          </view>
-        </view>
-        <text class="weather-date">{{ todayText }}</text>
-      </view>
-    </view>
     <view class="mood-entry" :style="moodEntryStyle" @tap="moodOpen = true">
       <text v-if="moodEmoji" class="mood-entry-emoji">{{ moodEmoji }}</text>
       <text v-else class="mood-entry-text">心情</text>
@@ -170,8 +124,6 @@
 <script setup>
 import { MOOD_OPTIONS, getMoodByDate, getToday } from '@/api/notebook'
 import { currentMoodKey, ensureMoodThemeBg } from '@/utils/moodTheme'
-import { loadHomeWeather, COMMON_CITIES } from '@/api/weather'
-import { getWeatherFxLocalPath } from '@/utils/weatherFx'
 import { loadOwnerFlag, isOwnerSync } from '@/utils/owner'
 import MoodPicker from '@/components/MoodPicker.vue'
 import AiChatSheet from '@/components/AiChatSheet.vue'
@@ -286,18 +238,21 @@ const entries = ref([
     id: 'notebook',
     name: '记事本',
     desc: '记录计划与感受',
+    size: 'large',
     path: '/pages/notebook/index',
   },
   {
     id: 'ledger',
     name: '记账',
     desc: '记录每天花了多少钱',
+    size: 'wide',
     path: '/pages/ledger/index',
   },
   {
     id: 'supplies',
     name: '生活用品',
     desc: '必需品库存与剩余量',
+    size: 'wide',
     path: '/pages/supplies/index',
   },
 ])
@@ -306,6 +261,7 @@ const novelEntry = {
   id: 'novel',
   name: '小说',
   desc: '东野 · 珍藏',
+  size: 'wide',
   path: '/pages/novel/index',
 }
 
@@ -313,6 +269,7 @@ const theaterEntry = {
   id: 'theater',
   name: '剧场',
   desc: '从小和太子过命之交',
+  size: 'wide',
   path: '/pages/theater/index',
 }
 
@@ -320,6 +277,7 @@ const wallpaperEntry = {
   id: 'wallpaper',
   name: '壁纸',
   desc: '精选手机壁纸',
+  size: 'wide',
   path: '/pages/wallpaper/index',
 }
 
@@ -327,6 +285,7 @@ const resourcesEntry = {
   id: 'resources',
   name: '资源库',
   desc: '简历等实用模板',
+  size: 'wide',
   path: '/pages/resources/index',
 }
 
@@ -334,6 +293,7 @@ const seriousEntry = {
   id: 'serious',
   name: 'Serious',
   desc: '主人专属认真区',
+  size: 'mini',
   path: '/pages/notebook/serious/index',
 }
 
@@ -341,6 +301,7 @@ const dietEntry = {
   id: 'diet',
   name: '减肥',
   desc: '饮食运动打卡',
+  size: 'mini',
   path: '/pages/diet/index',
 }
 
@@ -348,6 +309,7 @@ const hushenEntry = {
   id: 'hushen',
   name: '胡神',
   desc: '胡神 · 专攻',
+  size: 'mini',
   path: '/pages/hushen/index',
 }
 
@@ -355,6 +317,7 @@ const twinEntry = {
   id: 'twin',
   name: '分身',
   desc: '胡神 AI 分身',
+  size: 'mini',
   path: '/pages/twin/index',
 }
 
@@ -362,6 +325,7 @@ const albumEntry = {
   id: 'album',
   name: '相册',
   desc: '照片云存档',
+  size: 'mini',
   path: '/pages/album/index',
 }
 
@@ -369,6 +333,7 @@ const codeAssistEntry = {
   id: 'codeAssist',
   name: '小黑',
   desc: '本机 publish 后对话排查',
+  size: 'mini',
   path: '/pages/code-assist/index',
 }
 
@@ -406,15 +371,9 @@ const aiFloatStyle = computed(() => {
     height: AI_FLOAT_SIZE + 'px',
   }
 })
-const weatherDockStyle = ref({})
 const contentPadStyle = ref({})
 const healingQuote = ref('')
-const weather = ref(null)
-const weatherBusy = ref(false)
-const weatherTextPhase = ref('') // '' | 'out' | 'in'
-const weatherFxSrc = ref('')
 const showPersonal = ref(isOwnerSync())
-let weatherFxToken = 0
 
 const entrySections = computed(() => {
   const list = entries.value
@@ -427,14 +386,10 @@ const entrySections = computed(() => {
   const sections = [
     {
       id: 'record',
-      title: '记录',
-      sub: 'RECORD',
       items: recordItems,
     },
     {
       id: 'leisure',
-      title: '休闲',
-      sub: 'LEISURE',
       items: [novelEntry, theaterEntry, wallpaperEntry, resourcesEntry],
     },
   ]
@@ -442,8 +397,6 @@ const entrySections = computed(() => {
   if (showPersonal.value) {
     sections.push({
       id: 'personal',
-      title: '个人',
-      sub: 'PERSONAL',
       items: [seriousEntry, dietEntry, hushenEntry, twinEntry, albumEntry, codeAssistEntry],
     })
   }
@@ -451,56 +404,9 @@ const entrySections = computed(() => {
   return sections
 })
 
-const weatherTextClass = computed(() => {
-  if (weatherTextPhase.value === 'out') return 'is-out'
-  if (weatherTextPhase.value === 'in') return 'is-in'
-  return ''
-})
-
-const weatherTemp = computed(() => {
-  if (!weather.value || weather.value.temp === '' || weather.value.temp == null) return '--°'
-  return weather.value.temp + '°'
-})
-
-const weatherCondText = computed(() => {
-  return (weather.value && weather.value.text) || ''
-})
-
-const weatherCity = computed(() => {
-  return (weather.value && weather.value.city) || ''
-})
-
-const weatherIconKind = computed(() => {
-  const n = Number(weather.value && weather.value.icon)
-  if (!isFinite(n)) return 'cloudy'
-  if (n === 100 || n === 150) return 'sunny'
-  if ((n >= 101 && n <= 104) || (n >= 151 && n <= 154)) return 'cloudy'
-  if (n >= 302 && n <= 304) return 'storm'
-  if (n >= 300 && n <= 399) return 'rainy'
-  if (n >= 400 && n <= 499) return 'snowy'
-  if (n >= 500 && n <= 515) return 'fog'
-  return 'cloudy'
-})
-
-const greeting = computed(() => {
-  const hour = new Date().getHours()
-  if (hour < 6) return '超级 VIP，夜色专属'
-  if (hour < 12) return '早安，超级 VIP'
-  if (hour < 14) return '中午好，天龙人'
-  if (hour < 18) return '下午好，超级 VIP'
-  return '晚上好，超凡时刻'
-})
-
-const todayText = computed(() => {
-  const date = new Date()
-  const weekDays = ['日', '一', '二', '三', '四', '五', '六']
-  return date.getMonth() + 1 + '月' + date.getDate() + '日 · 星期' + weekDays[date.getDay()]
-})
-
 onMounted(async () => {
   layoutTopEntries()
   initAiFloatPos()
-  refreshWeather()
   await loadOwnerFlag()
   showPersonal.value = isOwnerSync()
 })
@@ -510,99 +416,6 @@ onShow(() => {
   loadMoodEntry()
   ensureMoodThemeBg(false)
 })
-
-onUnmounted(() => {
-  clearWeatherFx()
-})
-
-watch(weatherIconKind, () => {
-  syncWeatherFx()
-})
-
-function clearWeatherFx() {
-  weatherFxToken += 1
-  weatherFxSrc.value = ''
-}
-
-function onWeatherFxError() {
-  weatherFxSrc.value = ''
-}
-
-async function syncWeatherFx() {
-  if (!weather.value) {
-    clearWeatherFx()
-    return
-  }
-  const kind = weatherIconKind.value
-  const token = ++weatherFxToken
-  try {
-    const path = await getWeatherFxLocalPath(kind)
-    if (token !== weatherFxToken) return
-    if (!weather.value) return
-    if (weatherIconKind.value !== kind) return
-    if (!path) {
-      weatherFxSrc.value = ''
-      return
-    }
-    if (weatherFxSrc.value === path) return
-    weatherFxSrc.value = path
-    await wait(32)
-    if (token !== weatherFxToken) return
-    try {
-      uni.createVideoContext('weatherFxVideo').play()
-    } catch (e) {
-      // autoplay 已开
-    }
-  } catch (err) {
-    console.error('加载天气视频失败', err)
-    if (token !== weatherFxToken) return
-    weatherFxSrc.value = ''
-  }
-}
-
-function wait(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms)
-  })
-}
-
-async function refreshWeather() {
-  try {
-    const data = await loadHomeWeather({ force: false })
-    if (!data) return
-    if (data.temp === '' || data.temp == null) return
-    weather.value = data
-    syncWeatherFx()
-  } catch (err) {
-    console.error('加载天气失败', err)
-  }
-}
-
-async function toggleWeatherCity() {
-  if (weatherBusy.value) return
-  weatherBusy.value = true
-  weatherTextPhase.value = 'out'
-
-  const cur = (weather.value && weather.value.city) || COMMON_CITIES[0]
-  const idx = COMMON_CITIES.indexOf(cur)
-  const next = COMMON_CITIES[idx === 0 ? 1 : 0]
-
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 160))
-    const data = await loadHomeWeather({ city: next, force: true })
-    if (data) {
-      weather.value = data
-      syncWeatherFx()
-    }
-    weatherTextPhase.value = 'in'
-    await new Promise((resolve) => setTimeout(resolve, 280))
-  } catch (err) {
-    console.error('切换天气失败', err)
-  } finally {
-    weatherTextPhase.value = ''
-    weatherBusy.value = false
-  }
-}
 
 function pickHealingQuote() {
   const list = HEALING_QUOTES
@@ -614,15 +427,12 @@ function pickHealingQuote() {
   healingQuote.value = next
 }
 
-/** 天气坞左上角；心情贴胶囊左侧；内容区顶距避开天气坞 */
+/** 心情贴胶囊左侧；内容顶距留导航下小间距（语录回到内容流顶部） */
 function layoutTopEntries() {
   const sys = uni.getSystemInfoSync()
   const menu = wx.getMenuButtonBoundingClientRect()
   const edgePad = 16
-  const dockW = 208
-  // 坞内四行（温/况/城/日期）估高，给问候语留空
-  const dockH = 70
-  const contentGap = 28
+  const contentGap = 12
 
   if (!menu) {
     const top = (sys.statusBarHeight || 20) + 6
@@ -632,35 +442,21 @@ function layoutTopEntries() {
       right: edgePad + 'px',
       height: moodH + 'px',
     }
-    weatherDockStyle.value = {
-      top: top + 'px',
-      left: edgePad + 'px',
-      width: dockW + 'px',
-    }
     contentPadStyle.value = {
-      paddingTop: dockH + contentGap + 'px',
+      paddingTop: contentGap + 'px',
     }
     return
   }
 
   const moodRight = sys.windowWidth - menu.left + 8
-  // 导航栏大致到胶囊底；坞底相对内容起点的伸出量
-  const navBottom = menu.top + menu.height
-  const dockBottom = menu.top + dockH
-  const padTop = Math.max(48, dockBottom - navBottom + contentGap)
 
   moodEntryStyle.value = {
     top: menu.top + 'px',
     right: moodRight + 'px',
     height: menu.height + 'px',
   }
-  weatherDockStyle.value = {
-    top: menu.top + 'px',
-    left: edgePad + 'px',
-    width: dockW + 'px',
-  }
   contentPadStyle.value = {
-    paddingTop: padTop + 'px',
+    paddingTop: contentGap + 'px',
   }
 }
 
@@ -902,335 +698,16 @@ function handleEntryTap(item) {
   box-sizing: border-box;
 }
 
+/* 语录：内容流顶部，导航正下方左对齐 */
 .hero {
   margin-bottom: 28rpx;
-  padding-top: 8rpx;
+  padding-top: 6rpx;
 }
 
-.content--vip .greeting {
-  font-size: 44rpx;
-  font-weight: 700;
-  letter-spacing: 2rpx;
-  white-space: nowrap;
-  color: $color-primary-dark;
-}
-
-.content--vip .hero-desc {
-  font-size: 36rpx;
-  font-weight: 600;
-}
-
-.content--vip .entry-name {
-  font-size: 22rpx;
-  font-weight: 700;
-}
-
-.hero--vip {
-  /* 天气坞是 fixed，问候不再额外缩右，保证一行显示 */
-  padding-right: 0;
-}
-
-.greeting {
-  display: block;
-  font-size: 48rpx;
-  font-weight: 500;
-  color: $color-primary-dark;
-  letter-spacing: 6rpx;
-  margin-bottom: 12rpx;
-  white-space: nowrap;
-}
-
-.weather-dock {
-  position: fixed;
-  z-index: 110;
-  min-height: 0;
-  padding: 16rpx 18rpx 14rpx;
-  border-radius: 22rpx;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.28);
-  border: 1rpx solid rgba(255, 255, 255, 0.42);
-  box-shadow: 0 6rpx 20rpx rgba(43, 127, 212, 0.1);
-  box-sizing: border-box;
-  text-align: center;
-}
-
-.weather-dock-video {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
-  border-radius: 24rpx;
-}
-
-.weather-dock-tint {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: rgba(232, 244, 252, 0.42);
-}
-
-.weather-dock-body {
-  position: relative;
-  z-index: 2;
-  transition:
-    opacity 0.22s ease,
-    transform 0.22s ease;
-}
-
-.weather-dock-body.is-out {
-  opacity: 0;
-  transform: translateY(-8rpx);
-}
-
-.weather-dock-body.is-in {
-  animation: weatherTextIn 0.28s ease;
-}
-
-.weather-temp {
-  display: block;
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #1a1a1a;
-  line-height: 1.1;
-  letter-spacing: 1rpx;
-  text-align: center;
-  text-shadow: 0 1rpx 4rpx rgba(255, 255, 255, 0.75);
-}
-
-.weather-cond {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  margin-top: 4rpx;
-}
-
-.weather-cond-text {
-  font-size: 22rpx;
-  font-weight: 700;
-  color: #1a1a1a;
-  letter-spacing: 1rpx;
-}
-
-.weather-city-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  margin-top: 4rpx;
-}
-
-.weather-city {
-  font-size: 20rpx;
-  font-weight: 700;
-  color: #1a1a1a;
-  letter-spacing: 1rpx;
-}
-
-.weather-date {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 20rpx;
-  font-weight: 600;
-  color: #1a1a1a;
-  letter-spacing: 1rpx;
-  line-height: 1.3;
-  text-align: center;
-}
-
-.weather-toggle {
-  width: 36rpx;
-  height: 36rpx;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(74, 159, 232, 0.12);
-  box-sizing: border-box;
-}
-
-.weather-toggle.busy {
-  background: rgba(74, 159, 232, 0.22);
-}
-
-.toggle-spin {
-  position: relative;
-  width: 20rpx;
-  height: 20rpx;
-}
-
-.toggle-spin.spin {
-  animation: weatherSpin 0.65s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.spin-arc {
-  position: absolute;
-  width: 16rpx;
-  height: 16rpx;
-  border-radius: 50%;
-  border: 2rpx solid transparent;
-  box-sizing: border-box;
-}
-
-.spin-arc-a {
-  left: 2rpx;
-  top: 0;
-  border-top-color: $color-primary;
-  border-right-color: $color-primary;
-  transform: rotate(-20deg);
-}
-
-.spin-arc-b {
-  right: 2rpx;
-  bottom: 0;
-  border-bottom-color: $color-primary;
-  border-left-color: $color-primary;
-  transform: rotate(-20deg);
-}
-
-.spin-tip {
-  position: absolute;
-  width: 0;
-  height: 0;
-  border-style: solid;
-}
-
-.spin-tip.tip-a {
-  top: 0;
-  right: 1rpx;
-  border-width: 0 0 7rpx 6rpx;
-  border-color: transparent transparent $color-primary transparent;
-  transform: rotate(28deg);
-}
-
-.spin-tip.tip-b {
-  bottom: 0;
-  left: 1rpx;
-  border-width: 7rpx 6rpx 0 0;
-  border-color: $color-primary transparent transparent transparent;
-  transform: rotate(28deg);
-}
-
-/* 天气状况 CSS 图标 */
-.wx-ico {
-  position: relative;
-  width: 28rpx;
-  height: 28rpx;
-  flex-shrink: 0;
-}
-
-.wx-ico.ico-sunny::before {
-  content: '';
-  position: absolute;
-  left: 6rpx;
-  top: 6rpx;
-  width: 16rpx;
-  height: 16rpx;
-  border-radius: 50%;
-  background: #f5a623;
-  box-shadow: 0 0 0 3rpx rgba(245, 166, 35, 0.25);
-}
-
-.wx-ico.ico-cloudy::before,
-.wx-ico.ico-rainy::before,
-.wx-ico.ico-snowy::before,
-.wx-ico.ico-storm::before {
-  content: '';
-  position: absolute;
-  left: 2rpx;
-  top: 8rpx;
-  width: 18rpx;
-  height: 12rpx;
-  border-radius: 10rpx;
-  background: rgba(107, 143, 168, 0.55);
-}
-
-.wx-ico.ico-cloudy::after,
-.wx-ico.ico-rainy::after,
-.wx-ico.ico-snowy::after {
-  content: '';
-  position: absolute;
-  left: 10rpx;
-  top: 4rpx;
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 50%;
-  background: rgba(107, 143, 168, 0.7);
-}
-
-.wx-ico.ico-rainy::before {
-  box-shadow:
-    4rpx 16rpx 0 -6rpx $color-primary,
-    11rpx 18rpx 0 -6rpx $color-primary,
-    18rpx 16rpx 0 -6rpx $color-primary;
-}
-
-.wx-ico.ico-snowy::before {
-  box-shadow:
-    6rpx 17rpx 0 -5rpx rgba(120, 160, 200, 0.95),
-    14rpx 19rpx 0 -5rpx rgba(120, 160, 200, 0.95);
-}
-
-.wx-ico.ico-storm::after {
-  content: '';
-  position: absolute;
-  left: 12rpx;
-  top: 12rpx;
-  width: 0;
-  height: 0;
-  border-left: 5rpx solid transparent;
-  border-right: 5rpx solid transparent;
-  border-top: 11rpx solid #f5a623;
-}
-
-.wx-ico.ico-fog::before,
-.wx-ico.ico-fog::after {
-  content: '';
-  position: absolute;
-  left: 2rpx;
-  right: 2rpx;
-  height: 3rpx;
-  border-radius: 2rpx;
-  background: rgba(107, 143, 168, 0.55);
-}
-
-.wx-ico.ico-fog::before {
-  top: 8rpx;
-  box-shadow: 0 8rpx 0 rgba(107, 143, 168, 0.4);
-}
-
-.wx-ico.ico-fog::after {
-  top: 16rpx;
-  left: 6rpx;
-  right: 6rpx;
-}
-
-@keyframes weatherSpin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes weatherTextIn {
-  from {
-    opacity: 0;
-    transform: translateY(8rpx);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.hero .hero-desc {
+  font-size: 37rpx;
+  font-weight: 800;
+  line-height: 1.5;
 }
 
 .hero-desc {
@@ -1247,99 +724,40 @@ function handleEntryTap(item) {
     0 2rpx 8rpx rgba(255, 255, 255, 0.55);
 }
 
+/* 留白隐分组：组间距区分区块，无标题 */
 .entry-section {
-  margin-top: 20rpx;
+  margin-top: 36rpx;
 }
 
 .entry-section:first-of-type {
-  margin-top: 18rpx;
+  margin-top: 8rpx;
 }
 
-.section-head {
-  position: relative;
-  display: flex;
-  align-items: center;
-  margin-bottom: 10rpx;
-  padding-left: 4rpx;
-}
-
-.section-accent {
-  width: 10rpx;
-  height: 28rpx;
-  margin-right: 14rpx;
-  border-radius: 4rpx;
-  background: linear-gradient(180deg, $color-primary 0%, $color-primary-dark 100%);
-  transform: skewY(-8deg);
-  flex-shrink: 0;
-}
-
-.section-title-wrap {
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  gap: 12rpx;
-  z-index: 1;
-}
-
-.section-title {
-  font-size: 32rpx;
-  font-weight: 800;
-  color: $color-title;
-  letter-spacing: 6rpx;
-  line-height: 1.1;
-  text-shadow:
-    0 1rpx 2rpx rgba(255, 255, 255, 0.95),
-    0 0 12rpx rgba(255, 255, 255, 0.72),
-    0 2rpx 8rpx rgba(255, 255, 255, 0.55);
-}
-
-.section-sub {
-  font-size: 18rpx;
-  font-weight: 600;
-  color: $color-primary;
-  letter-spacing: 3rpx;
-  opacity: 0.75;
-  transform: translateY(-4rpx);
-  text-shadow:
-    0 1rpx 2rpx rgba(255, 255, 255, 0.9),
-    0 0 10rpx rgba(255, 255, 255, 0.65);
-}
-
-.section-line {
-  flex: 1;
-  height: 6rpx;
-  margin-left: 16rpx;
-  border-radius: 999rpx;
-  background: linear-gradient(
-    90deg,
-    rgba(74, 159, 232, 0.35) 0%,
-    rgba(74, 159, 232, 0.08) 55%,
-    transparent 100%
-  );
-  transform: skewX(-12deg);
-}
-
+/* Bento 网格：4 列，大小混排 */
 .entry-list {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 24rpx;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 132rpx;
+  gap: 20rpx;
 }
 
+/* 毛玻璃卡片，透出心情主题渐变 */
 .entry-card {
-  box-sizing: border-box;
-  width: calc((100% - 48rpx) / 3);
-  height: 148rpx;
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 14rpx 8rpx 12rpx;
-  background: $color-card-soft;
+  gap: 8rpx;
+  padding: 12rpx 6rpx 10rpx;
+  background-color: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(40rpx) saturate(1.4);
+  -webkit-backdrop-filter: blur(40rpx) saturate(1.4);
+  border: 1rpx solid rgba(255, 255, 255, 0.8);
   border-radius: 24rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.92);
-  box-shadow: $shadow-card-elevated;
+  box-shadow: 0 4rpx 20rpx rgba(107, 68, 35, 0.06);
+  box-sizing: border-box;
   transform: translateY(0);
   transition:
     opacity 0.2s ease,
@@ -1350,31 +768,174 @@ function handleEntryTap(item) {
 .entry-card--active {
   opacity: 0.94;
   transform: translateY(2rpx);
-  box-shadow: $shadow-card-pressed;
+  box-shadow: 0 2rpx 10rpx rgba(107, 68, 35, 0.1);
+}
+
+/* 大卡 2×2：图标左上、文字左下 */
+.size--large {
+  grid-column: span 2;
+  grid-row: span 2;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0;
+  padding: 26rpx;
+}
+
+/* 宽卡 2×1：横向图标 + 文字 */
+.size--wide {
+  grid-column: span 2;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 18rpx;
+  padding: 0 24rpx;
+}
+
+.entry-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.size--large .entry-text {
+  flex: none;
+  width: 100%;
 }
 
 .entry-icon-box {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 16rpx;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 18rpx;
   background: linear-gradient(145deg, $color-primary 0%, $color-primary-dark 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8rpx;
   flex-shrink: 0;
   box-sizing: border-box;
   box-shadow: $shadow-icon;
 }
 
-.entry-icon-box--tech {
-  background: linear-gradient(145deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+.size--large .entry-icon-box {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 24rpx;
 }
 
-/* 图标盒子缩小后，内部 glyph 同步缩放 */
+/* 图标 glyph 随盒尺寸缩放 */
 .entry-icon-box > view {
-  transform: scale(0.78);
+  transform: scale(0.9);
   transform-origin: center center;
+}
+
+.size--large .entry-icon-box > view {
+  transform: scale(1.2);
+}
+
+/* 专属色 tint：卡片渐变着色，点到为止 */
+.tint--notebook {
+  background-image: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.04) 55%, transparent 100%);
+}
+
+.tint--ledger {
+  background-image: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(52, 211, 153, 0.04) 55%, transparent 100%);
+}
+
+.tint--supplies {
+  background-image: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(251, 191, 36, 0.04) 55%, transparent 100%);
+}
+
+.tint--novel {
+  background-image: linear-gradient(135deg, rgba(236, 72, 153, 0.12) 0%, rgba(244, 114, 182, 0.04) 55%, transparent 100%);
+}
+
+.tint--theater {
+  background-image: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(248, 113, 113, 0.04) 55%, transparent 100%);
+}
+
+.tint--wallpaper {
+  background-image: linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(56, 189, 248, 0.04) 55%, transparent 100%);
+}
+
+.tint--resources {
+  background-image: linear-gradient(135deg, rgba(20, 184, 166, 0.12) 0%, rgba(45, 212, 191, 0.04) 55%, transparent 100%);
+}
+
+.tint--serious {
+  background-image: linear-gradient(135deg, rgba(71, 85, 105, 0.12) 0%, rgba(100, 116, 139, 0.04) 55%, transparent 100%);
+}
+
+.tint--diet {
+  background-image: linear-gradient(135deg, rgba(132, 204, 22, 0.12) 0%, rgba(163, 230, 53, 0.04) 55%, transparent 100%);
+}
+
+.tint--hushen {
+  background-image: linear-gradient(135deg, rgba(184, 134, 11, 0.14) 0%, rgba(212, 160, 23, 0.04) 55%, transparent 100%);
+}
+
+.tint--twin {
+  background-image: linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(167, 139, 250, 0.04) 55%, transparent 100%);
+}
+
+.tint--album {
+  background-image: linear-gradient(135deg, rgba(251, 113, 133, 0.12) 0%, rgba(253, 164, 175, 0.04) 55%, transparent 100%);
+}
+
+.tint--codeAssist {
+  background-image: linear-gradient(135deg, rgba(34, 211, 238, 0.12) 0%, rgba(3, 105, 161, 0.04) 55%, transparent 100%);
+}
+
+/* 入口专属渐变图标 */
+.ib--notebook {
+  background: linear-gradient(145deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+.ib--ledger {
+  background: linear-gradient(145deg, #10b981 0%, #34d399 100%);
+}
+
+.ib--supplies {
+  background: linear-gradient(145deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+.ib--novel {
+  background: linear-gradient(145deg, #ec4899 0%, #f472b6 100%);
+}
+
+.ib--theater {
+  background: linear-gradient(145deg, #ef4444 0%, #f87171 100%);
+}
+
+.ib--wallpaper {
+  background: linear-gradient(145deg, #0ea5e9 0%, #38bdf8 100%);
+}
+
+.ib--resources {
+  background: linear-gradient(145deg, #14b8a6 0%, #2dd4bf 100%);
+}
+
+.ib--serious {
+  background: linear-gradient(145deg, #475569 0%, #64748b 100%);
+}
+
+.ib--diet {
+  background: linear-gradient(145deg, #84cc16 0%, #a3e635 100%);
+}
+
+.ib--hushen {
+  background: linear-gradient(145deg, #b8860b 0%, #d4a017 100%);
+}
+
+.ib--twin {
+  background: linear-gradient(145deg, #8b5cf6 0%, #a78bfa 100%);
+}
+
+.ib--album {
+  background: linear-gradient(145deg, #fb7185 0%, #fda4af 100%);
+}
+
+.ib--codeAssist {
+  background: linear-gradient(145deg, #22d3ee 0%, #0ea5e9 55%, #0369a1 100%);
 }
 
 /* 记事本：书脊 + 内页粗线 */
@@ -1759,6 +1320,24 @@ function handleEntryTap(item) {
   box-sizing: border-box;
 }
 
+/* 剧场：播放三角 */
+.icon-theater {
+  position: relative;
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.icon-theater-tri {
+  position: absolute;
+  left: 13rpx;
+  top: 10rpx;
+  width: 0;
+  height: 0;
+  border-top: 12rpx solid transparent;
+  border-bottom: 12rpx solid transparent;
+  border-left: 20rpx solid rgba(255, 255, 255, 0.95);
+}
+
 /* 小黑：代码括号示意（不用模板里的花括号，避免编译成插值） */
 .icon-code {
   position: relative;
@@ -1803,7 +1382,7 @@ function handleEntryTap(item) {
   display: block;
   width: 100%;
   font-size: 24rpx;
-  font-weight: 600;
+  font-weight: 700;
   color: $color-title;
   letter-spacing: 1rpx;
   text-align: center;
@@ -1811,6 +1390,46 @@ function handleEntryTap(item) {
   white-space: nowrap;
   text-overflow: ellipsis;
   line-height: 1.3;
+  text-shadow:
+    0 1rpx 2rpx rgba(255, 255, 255, 0.9),
+    0 0 8rpx rgba(255, 255, 255, 0.55);
+}
+
+.size--wide .entry-name,
+.size--large .entry-name {
+  text-align: left;
+}
+
+.size--wide .entry-name {
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.size--large .entry-name {
+  font-size: 32rpx;
+  font-weight: 800;
+}
+
+.entry-desc {
+  display: block;
+  width: 100%;
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  font-weight: 500;
+  color: $color-primary-dark;
+  letter-spacing: 1rpx;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+  text-shadow:
+    0 1rpx 2rpx rgba(255, 255, 255, 0.85),
+    0 0 6rpx rgba(255, 255, 255, 0.45);
+}
+
+.size--large .entry-desc {
+  font-size: 22rpx;
 }
 
 @keyframes fadeIn {
@@ -1826,38 +1445,5 @@ function handleEntryTap(item) {
 
 .fade-in {
   animation: fadeIn 0.7s ease-out forwards;
-}
-
-.fade-in-delay {
-  animation: fadeIn 0.7s ease-out 0.12s both;
-}
-
-/* 不用事先 opacity:0：部分机型 animation 不触发时菜单会永久隐藏 */
-.entry-delay-0 {
-  animation: fadeIn 0.55s ease-out 0.18s both;
-}
-
-.entry-delay-1 {
-  animation: fadeIn 0.55s ease-out 0.26s both;
-}
-
-.entry-delay-2 {
-  animation: fadeIn 0.55s ease-out 0.34s both;
-}
-
-.entry-delay-3 {
-  animation: fadeIn 0.55s ease-out 0.42s both;
-}
-
-.entry-delay-4 {
-  animation: fadeIn 0.55s ease-out 0.5s both;
-}
-
-.entry-delay-5 {
-  animation: fadeIn 0.55s ease-out 0.58s both;
-}
-
-.entry-delay-6 {
-  animation: fadeIn 0.55s ease-out 0.66s both;
 }
 </style>

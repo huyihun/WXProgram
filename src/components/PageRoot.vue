@@ -9,15 +9,15 @@
     :style="rootStyle"
   >
     <image
-      v-if="moodBgSrc"
+      v-if="showMoodBg"
       class="page-mood-bg"
       :src="moodBgSrc"
       mode="aspectFill"
       @error="onMoodBgError"
     />
-    <view class="page-mood-veil" :class="{ dark: darkNav }" />
+    <view v-if="showMoodBg" class="page-mood-veil" :class="{ dark: darkNav }" />
 
-    <CustomNav :back="back" :dark="darkNav" />
+    <CustomNav v-if="!hideNav" :back="back" :dark="darkNav" />
 
     <view
       class="page-body"
@@ -73,10 +73,21 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  /** 不渲染 CustomNav（含占位），内容区占满视口（沉浸阅读等） */
+  hideNav: {
+    type: Boolean,
+    default: false,
+  },
+  /** 不渲染心情壁纸与 veil，允许 extraStyle 实色背景生效 */
+  noMoodBg: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 /** 显式取 .value，避免小程序端导入的 ref 未自动解包 */
 const moodBgSrc = computed(() => themeBgUrl.value || '')
+const showMoodBg = computed(() => !props.noMoodBg && !!moodBgSrc.value)
 
 let bgErrorRetrying = false
 
@@ -93,7 +104,7 @@ function onMoodBgError() {
 
 const rootStyle = computed(() => {
   const base = Object.assign({}, themeStyle.value || {})
-  const hasBg = !!moodBgSrc.value
+  const hasBg = showMoodBg.value
   // 有壁纸时透明透出；无壁纸回退主题实色，避免空白
   if (hasBg) {
     base.background = 'transparent'
