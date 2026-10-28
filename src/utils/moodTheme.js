@@ -1,9 +1,11 @@
 /**
  * 心情对应的全局主题色
  * 通过 CSS 变量挂到 PageRoot / page，覆盖 uni.scss 中的色值
- * 全站背景改为纯 CSS 氛围渐变（不再加载实景主题壁纸）
+ * 全站背景：实景主题壁纸（换链）+ 可读蒙层
  */
 import { ref } from 'vue'
+import { WALLPAPER_FILE_IDS } from '@/utils/wallpaperCatalog'
+import { getPlayUrl } from '@/utils/playlist'
 
 const STORAGE_KEY = 'moodThemeKey'
 
@@ -306,16 +308,10 @@ export const themeStyle = ref(getMoodThemeStyle('coffee'))
 /** 当前心情 key */
 export const currentMoodKey = ref('coffee')
 
-/**
- * 主题实景壁纸 URL（已停用：恒为空，改用 CSS 氛围渐变）
- * 壁纸页珍藏图库仍走 wallpaperCatalog，与此无关
- */
+/** 当前主题壁纸临时 URL，供 PageRoot 全站背景 */
 export const themeBgUrl = ref('')
 
-/**
- * 历史：心情 → 壁纸文件名（仅备用对照，主题背景不再加载）
- * 对照 src/主题背景图片.txt
- */
+/** 心情 → 壁纸文件名（对照珍藏壁纸目录） */
 export const MOOD_BG_FILES = {
   coffee: 'w055.jpg',
   happy: 'w017.jpg',
@@ -334,11 +330,17 @@ export const MOOD_BG_FILES = {
   relaxed: 'w078.jpg',
 }
 
-export function getMoodBgFileID() {
-  return ''
+const bgUrlMem = {}
+const bgInflight = {}
+let bgSeq = 0
+
+export function getMoodBgFileID(key) {
+  const safe = MOOD_THEMES[key] ? key : 'coffee'
+  const file = MOOD_BG_FILES[safe] || MOOD_BG_FILES.coffee
+  return WALLPAPER_FILE_IDS[file] || ''
 }
 
-/** #RRGGBB → rgba，用于氛围底上的轻蒙层 */
+/** #RRGGBB → rgba，用于壁纸上的可读蒙层 */
 function hexToVeil(hex, alpha) {
   const h = String(hex || '').replace('#', '')
   if (h.length !== 6) {
@@ -350,14 +352,90 @@ function hexToVeil(hex, alpha) {
   return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')'
 }
 
-/** 清掉过期缓存（兼容旧调用，现无壁纸链） */
-export function invalidateThemeBgCache() {
-  themeBgUrl.value = ''
+function delay(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms)
+  })
 }
 
-/** 主题背景已改为 CSS，无需换链；保留 API 避免调用方报错 */
-export function ensureMoodThemeBg() {
-  themeBgUrl.value = ''
+async function fetchThemeBgUrl(fid) {
+  if (bgUrlMem[fid]) return bgUrlMem[fid]
+  if (bgInflight[fid]) return bgInflight[fid]
+
+  bgInflight[fid] = (async function () {
+    try {
+      let url = ''
+      try {
+        url = await getPlayUrl(fid)
+      } catch (err) {
+        console.warn('主题壁纸换链失败，将重试', err)
+      }
+      if (!url) {
+        await delay(400)
+        url = await getPlayUrl(fid)
+      }
+      if (url) bgUrlMem[fid] = url
+      return url || ''
+    } finally {
+      delete bgInflight[fid]
+    }
+  })()
+
+  return bgInflight[fid]
+}
+
+async function resolveThemeBg(key) {
+  const safe = MOOD_THEMES[key] ? key : 'coffee'
+  const fid = getMoodBgFileID(safe)
+  if (!fid) {
+    themeBgUrl.value = ''
+    return
+  }
+  if (bgUrlMem[fid]) {
+    themeBgUrl.value = bgUrlMem[fid]
+    return
+  }
+  const seq = ++bgSeq
+  try {
+    const url = await fetchThemeBgUrl(fid)
+    if (seq !== bgSeq) return
+    themeBgUrl.value = url || ''
+  } catch (err) {
+    console.warn('主题壁纸加载失败', err)
+    if (seq === bgSeq) themeBgUrl.value = ''
+  }
+}
+
+/** 清掉过期/坏掉的临时链缓存（按 fileID 或 url） */
+export function invalidateThemeBgCache(urlOrFid) {
+  const key = urlOrFid || ''
+  if (!key) return
+  if (bgUrlMem[key]) {
+    delete bgUrlMem[key]
+    return
+  }
+  const fids = Object.keys(bgUrlMem)
+  for (let i = 0; i < fids.length; i++) {
+    if (bgUrlMem[fids[i]] === key) delete bgUrlMem[fids[i]]
+  }
+}
+
+/**
+ * 保证当前主题有壁纸：空则补拉；force 时清缓存重拉
+ */
+export function ensureMoodThemeBg(force) {
+  const key = currentMoodKey.value || 'coffee'
+  const fid = getMoodBgFileID(key)
+  if (!fid) return
+  if (force) {
+    invalidateThemeBgCache(fid)
+    if (themeBgUrl.value) invalidateThemeBgCache(themeBgUrl.value)
+    themeBgUrl.value = ''
+    resolveThemeBg(key)
+    return
+  }
+  if (themeBgUrl.value) return
+  resolveThemeBg(key)
 }
 
 export function getMoodThemeStyle(key) {
@@ -376,8 +454,8 @@ export function getMoodThemeStyle(key) {
     '--shadow-card-elevated': theme['--shadow-card-elevated'],
     '--shadow-card-pressed': theme['--shadow-card-pressed'],
     '--shadow-icon': theme['--shadow-icon'],
-    // 氛围渐变已够干净，蒙层极淡
-    '--color-veil': hexToVeil(theme['--color-bg'], 0.12),
+    // 实景壁纸上的可读蒙层
+    '--color-veil': hexToVeil(theme['--color-bg'], 0.52),
   }
   if (safe === 'coffee') {
     style['--lyric-bg'] = '#1a1410'
@@ -401,25 +479,25 @@ export function getMoodThemeStyle(key) {
   return style
 }
 
-function applyMoodThemeCore(key) {
+function applyMoodThemeCore(key, loadBg) {
   const safeKey = MOOD_THEMES[key] ? key : 'coffee'
   currentMoodKey.value = safeKey
   themeStyle.value = getMoodThemeStyle(safeKey)
-  themeBgUrl.value = ''
   try {
     uni.setStorageSync(STORAGE_KEY, safeKey)
   } catch (err) {
     console.error('保存主题缓存失败', err)
   }
+  if (loadBg) resolveThemeBg(safeKey)
   return safeKey
 }
 
-/** 应用心情主题：更新内存 + 本地缓存（氛围渐变，不拉实景壁纸） */
+/** 应用心情主题：更新内存 + 本地缓存 + 壁纸 */
 export function applyMoodTheme(key) {
-  return applyMoodThemeCore(key)
+  return applyMoodThemeCore(key, true)
 }
 
-/** 从本地缓存恢复色板 */
+/** 从本地缓存恢复色板（不拉壁纸，需等云 init 后再 ensureMoodThemeBg / applyMoodTheme） */
 export function restoreMoodTheme() {
   let key = 'coffee'
   try {
@@ -427,5 +505,5 @@ export function restoreMoodTheme() {
   } catch (err) {
     console.error('读取主题缓存失败', err)
   }
-  return applyMoodThemeCore(key)
+  return applyMoodThemeCore(key, false)
 }
