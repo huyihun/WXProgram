@@ -146,5 +146,19 @@
       "^PageRoot$": "@/components/PageRoot.vue",
       "^PageLoading$": "@/components/PageLoading.vue"
     }
-  }
+  },
+  "subPackages": [
+    {
+      "root": "packageTwin",
+      "pages": [
+        {
+          "path": "pages/stage/index",
+          "style": {
+            "disableScroll": true,
+            "softinputMode": "adjustNothing"
+          }
+        }
+      ]
+    }
+  ]
 }

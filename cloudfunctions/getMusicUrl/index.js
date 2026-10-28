@@ -32,7 +32,8 @@ function isAllowedPath(id) {
     id.indexOf('/resources/') >= 0 ||
     id.indexOf('/resume/') >= 0 ||
     id.indexOf('/ideas/') >= 0 ||
-    id.indexOf('/twin/') >= 0
+    id.indexOf('/twin/') >= 0 ||
+    id.indexOf('/album/') >= 0
   )
 }
 

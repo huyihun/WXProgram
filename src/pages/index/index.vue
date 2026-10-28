@@ -70,8 +70,7 @@
                     <view class="icon-hushen-mark" />
                   </view>
                   <view v-else-if="item.id === 'twin'" class="icon-twin">
-                    <view class="icon-twin-face" />
-                    <view class="icon-twin-dot" />
+                    <image class="icon-twin-img" src="/static/twin/avatar.png" mode="aspectFill" />
                   </view>
                   <view v-else-if="item.id === 'album'" class="icon-album">
                     <view class="fa-back" />
@@ -88,7 +87,9 @@
                 </view>
                 <view class="entry-text">
                   <text class="entry-name">{{ item.name }}</text>
-                  <text v-if="item.size !== 'mini' && item.desc" class="entry-desc">{{ item.desc }}</text>
+                  <text v-if="item.size !== 'mini' && item.desc" class="entry-desc">{{
+                    item.desc
+                  }}</text>
                 </view>
               </view>
             </view>
@@ -317,8 +318,7 @@ const twinEntry = {
   id: 'twin',
   name: '分身',
   desc: '胡神 AI 分身',
-  size: 'mini',
-  path: '/pages/twin/index',
+  path: '/packageTwin/pages/stage/index',
 }
 
 const albumEntry = {
@@ -656,7 +656,11 @@ function handleEntryTap(item) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 35% 30%, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  background: radial-gradient(
+    circle at 35% 30%,
+    var(--color-primary) 0%,
+    var(--color-primary-dark) 100%
+  );
   border: 2rpx solid var(--color-card-soft);
   box-shadow: var(--shadow-icon);
 }
@@ -834,55 +838,120 @@ function handleEntryTap(item) {
 
 /* 专属色 tint：卡片渐变着色，点到为止 */
 .tint--notebook {
-  background-image: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.12) 0%,
+    rgba(139, 92, 246, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--ledger {
-  background-image: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(52, 211, 153, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.12) 0%,
+    rgba(52, 211, 153, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--supplies {
-  background-image: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(251, 191, 36, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.12) 0%,
+    rgba(251, 191, 36, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--novel {
-  background-image: linear-gradient(135deg, rgba(236, 72, 153, 0.12) 0%, rgba(244, 114, 182, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(236, 72, 153, 0.12) 0%,
+    rgba(244, 114, 182, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--theater {
-  background-image: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(248, 113, 113, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(239, 68, 68, 0.12) 0%,
+    rgba(248, 113, 113, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--wallpaper {
-  background-image: linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(56, 189, 248, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(14, 165, 233, 0.12) 0%,
+    rgba(56, 189, 248, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--resources {
-  background-image: linear-gradient(135deg, rgba(20, 184, 166, 0.12) 0%, rgba(45, 212, 191, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(20, 184, 166, 0.12) 0%,
+    rgba(45, 212, 191, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--serious {
-  background-image: linear-gradient(135deg, rgba(71, 85, 105, 0.12) 0%, rgba(100, 116, 139, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(71, 85, 105, 0.12) 0%,
+    rgba(100, 116, 139, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--diet {
-  background-image: linear-gradient(135deg, rgba(132, 204, 22, 0.12) 0%, rgba(163, 230, 53, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(132, 204, 22, 0.12) 0%,
+    rgba(163, 230, 53, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--hushen {
-  background-image: linear-gradient(135deg, rgba(184, 134, 11, 0.14) 0%, rgba(212, 160, 23, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(184, 134, 11, 0.14) 0%,
+    rgba(212, 160, 23, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--twin {
-  background-image: linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(167, 139, 250, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(139, 92, 246, 0.12) 0%,
+    rgba(167, 139, 250, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--album {
-  background-image: linear-gradient(135deg, rgba(251, 113, 133, 0.12) 0%, rgba(253, 164, 175, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(251, 113, 133, 0.12) 0%,
+    rgba(253, 164, 175, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 .tint--codeAssist {
-  background-image: linear-gradient(135deg, rgba(34, 211, 238, 0.12) 0%, rgba(3, 105, 161, 0.04) 55%, transparent 100%);
+  background-image: linear-gradient(
+    135deg,
+    rgba(34, 211, 238, 0.12) 0%,
+    rgba(3, 105, 161, 0.04) 55%,
+    transparent 100%
+  );
 }
 
 /* 入口专属渐变图标 */
@@ -1260,33 +1329,20 @@ function handleEntryTap(item) {
   background: rgba(255, 255, 255, 0.95);
 }
 
-/* 分身：人脸轮廓 */
+/* 分身：圆形头像 */
 .icon-twin {
-  position: relative;
   width: 44rpx;
   height: 44rpx;
-}
-
-.icon-twin-face {
-  position: absolute;
-  left: 8rpx;
-  top: 6rpx;
-  width: 28rpx;
-  height: 32rpx;
-  border-radius: 50% 50% 46% 46%;
-  border: 3rpx solid rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2rpx solid rgba(240, 215, 140, 0.9);
   box-sizing: border-box;
 }
 
-.icon-twin-dot {
-  position: absolute;
-  left: 18rpx;
-  top: 16rpx;
-  width: 8rpx;
-  height: 8rpx;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 10rpx 0 0 rgba(255, 255, 255, 0.95);
+.icon-twin-img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 /* 相册：双层相框 */

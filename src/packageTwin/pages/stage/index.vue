@@ -1,26 +1,71 @@
 <template>
   <view class="stage-page">
-    <!-- 背景图（云存储换链，透明度对齐项目标准：图 0.78 + 暗色蒙层） -->
-    <image v-if="bgUrl" class="stage-bg" :src="bgUrl" mode="aspectFill" @error="bgUrl = ''" />
-    <view v-if="bgUrl" class="stage-bg-veil" />
-
-    <!-- 3D 画布 -->
-    <canvas
-      v-if="!fallback"
-      id="stage-canvas"
-      type="webgl"
-      class="stage-canvas"
-      @touchstart="onTouchStart"
-      @touchmove="onTouchMove"
-      @touchend="onTouchEnd"
-    />
-
-    <!-- 兜底形象 -->
-    <view v-if="fallback" class="stage-fallback">
-      <image class="fb-avatar" src="/static/twin/avatar.png" mode="aspectFill" />
+    <!-- 整页暗紫氛围底 -->
+    <view class="stage-bg-art" aria-hidden="true">
+      <view class="bg-base" />
+      <view class="bg-glow" />
+      <view class="bg-vignette" />
     </view>
 
-    <!-- 加载态：金色旋转光环 + 真实下载百分比 -->
+    <!-- 顶栏短 3D / 头像展示区（Sheet 上滑时渐隐） -->
+    <view class="stage-hero" :style="heroCombinedStyle">
+      <!-- canvas 仅让出状态栏，头顶对齐胶囊 -->
+      <view class="stage-canvas-wrap" :style="canvasWrapStyle">
+        <canvas
+          v-if="!fallback"
+          id="stage-canvas"
+          type="webgl"
+          class="stage-canvas"
+          @touchstart="onTouchStart"
+          @touchmove="onTouchMove"
+          @touchend="onTouchEnd"
+        />
+        <view v-if="fallback" class="stage-fallback">
+          <image class="fb-avatar" :src="avatarSrc" mode="aspectFill" />
+        </view>
+      </view>
+      <view class="hero-fade" aria-hidden="true" />
+
+      <!-- 成长微条：点击 → 投喂 / 百宝箱 -->
+      <view class="hero-growth" @tap="onGrowthTap">
+        <text class="growth-label">Lv.{{ growth.level }} · {{ stage.label }}</text>
+        <view class="growth-bar">
+          <view class="growth-fill" :style="{ width: expPct + '%' }" />
+        </view>
+      </view>
+
+      <!-- 问候气泡 -->
+      <view v-if="greetText" class="greet-bubble" @tap="onGreetTap">
+        <text class="greet-bubble-text">{{ greetText }}</text>
+        <text class="greet-bubble-cta">聊聊 ›</text>
+      </view>
+
+      <!-- 投喂飞行/飘字（精简） -->
+      <view
+        v-if="feedingPhase === 'flying'"
+        class="food-fly"
+        :class="[{ go: flyGo }, 'fly--' + flyTier]"
+      >
+        <view class="fly-orb" />
+      </view>
+      <view v-if="floatText" class="float-exp">
+        <text class="float-exp-text">{{ floatText }}</text>
+      </view>
+      <view v-if="feedingPhase === 'digesting'" class="digest-tip">
+        <text class="digest-text">细嚼慢咽中…</text>
+      </view>
+    </view>
+
+    <!-- 进化提示 -->
+    <view v-if="evolveInfo" class="evolve-mask" @tap="evolveInfo = null">
+      <view class="evolve-banner">
+        <text class="evolve-kicker">{{ evolveInfo.stageUp ? '进 化' : '升 级' }}</text>
+        <text class="evolve-title">{{ evolveInfo.title }}</text>
+        <text class="evolve-sub">Lv.{{ evolveInfo.level }}</text>
+      </view>
+    </view>
+
+    <!-- 加载态 -->
     <view v-if="loading" class="stage-loading">
       <view class="load-ring">
         <view class="ring-spin" />
@@ -39,104 +84,301 @@
       </view>
     </view>
 
-    <!-- 场景内对话：模型头顶气泡（打字机，回复常驻，可手动关闭） -->
+    <!-- 可拖拽聊天 Sheet：上滑盖住 3D，下滑还原 -->
     <view
-      v-if="(sceneThinking || typedReply) && !bubbleDismissed"
-      class="scene-bubble"
-      @tap="openChat"
+      v-if="!loading"
+      class="stage-chat"
+      :class="{ expanded: chatExpanded, dragging: sheetDragging }"
+      :style="chatSheetStyle"
     >
-      <view class="scene-bubble-close" @tap.stop="dismissBubble">
-        <view class="bubble-close-x" />
+      <view
+        class="chat-grabber-wrap"
+        hover-class="chat-grabber-wrap--active"
+        @touchstart.stop="onGrabberTouchStart"
+        @touchmove.stop.prevent="onGrabberTouchMove"
+        @touchend.stop="onGrabberTouchEnd"
+        @touchcancel.stop="onGrabberTouchEnd"
+      >
+        <view class="chat-grabber-pill">
+          <view class="chat-grabber-bar" />
+        </view>
       </view>
-      <text class="scene-bubble-text">{{ sceneThinking ? '…' : typedReply }}</text>
-      <text class="scene-bubble-history">完整对话 ›</text>
-    </view>
 
-    <!-- 场景内输入条（七色云彩）：文字 / 图片 / 语音 -->
-    <view v-if="!loading" class="scene-input-bar" :style="inputBarStyle">
-      <view class="cloud-shine" />
-      <text class="cloud-glyph">☁️</text>
-      <view class="scene-tool" @tap="pickSceneImage">
-        <XiaoheiImageIcon />
+      <!-- 自动投喂动效：挂在聊天 Sheet 上，全屏展开时也能看见 -->
+      <view v-if="autoFeedFx" class="auto-feed-fx">
+        <view class="auto-feed-glow" />
+        <view class="auto-feed-orb a" />
+        <view class="auto-feed-orb b" />
+        <view class="auto-feed-orb c" />
+        <text class="auto-feed-plus">+{{ autoFeedFx.exp }}</text>
+        <text class="auto-feed-label">自动投喂</text>
       </view>
-      <view
-        class="scene-tool"
-        :class="{ active: sceneVoiceMode }"
-        @tap="toggleSceneVoice"
+      <scroll-view
+        class="stage-chat-scroll"
+        :scroll-y="!sheetDragging"
+        :scroll-into-view="scrollInto"
+        :show-scrollbar="false"
+        scroll-with-animation
+        @scroll="onChatScroll"
+        @touchstart="onScrollTouchStart"
+        @touchmove="onScrollTouchMove"
+        @touchend="onScrollTouchEnd"
+        @touchcancel="onScrollTouchEnd"
       >
-        <XiaoheiMicIcon />
-      </view>
-      <input
-        v-if="!sceneVoiceMode"
-        v-model="sceneInput"
-        class="scene-input"
-        :focus="sceneInputFocus"
-        :maxlength="500"
-        confirm-type="send"
-        :adjust-position="false"
-        :cursor-spacing="16"
-        @confirm="sendSceneMsg"
-      />
-      <view
-        v-else
-        class="scene-voice-hold"
-        :class="{ recording: sceneVoiceRecording, recognizing: sceneVoiceRecognizing }"
-        @touchstart.stop="onSceneVoiceStart"
-        @touchend.stop="onSceneVoiceEnd"
-        @touchcancel.stop="onSceneVoiceEnd"
-      >
-        <text class="scene-voice-text">{{ sceneVoiceLabel }}</text>
-      </view>
-      <view class="scene-send" :class="{ disabled: !canSceneSend }" @tap="sendSceneMsg">
-        <text class="scene-send-text">say</text>
-      </view>
-      <!-- 待发送图片缩略图 -->
-      <view v-if="scenePendingImage" class="scene-pending">
-        <image class="scene-pending-thumb" :src="scenePendingImage" mode="aspectFill" />
-        <view class="scene-pending-remove" @tap.stop="clearScenePendingImage">
+        <view v-if="!hasChatMsgs && !sceneThinking" class="stage-chat-empty">
+          <text class="stage-chat-empty-text">可以说今天发生的事，或点下方投喂教它</text>
+          <view class="stage-chips">
+            <view
+              v-for="(chip, ci) in displayChips"
+              :key="'chip-' + ci"
+              class="stage-chip"
+              hover-class="stage-chip--active"
+              @tap="sendQuickChip(chip)"
+            >
+              <text class="stage-chip-text">{{ chip }}</text>
+            </view>
+          </view>
+        </view>
+        <view
+          v-for="(m, i) in displayMessages"
+          :id="'msg-' + i"
+          :key="'msg-' + i"
+          class="msg-row"
+          :class="m.role === 'user' ? 'is-user' : m.role === 'system' ? 'is-system' : 'is-twin'"
+        >
+          <template v-if="m.role === 'system'">
+            <view class="msg-system">
+              <text class="msg-system-text">{{ m.content }}</text>
+            </view>
+          </template>
+          <template v-else>
+            <image
+              v-if="m.role !== 'user'"
+              class="msg-avatar"
+              :src="avatarSrc"
+              mode="aspectFill"
+            />
+            <view class="msg-col" :class="m.role === 'user' ? 'is-user' : 'is-twin'">
+              <text v-if="m.showTime && m.timeLabel" class="msg-time">{{ m.timeLabel }}</text>
+              <view
+                class="msg-bubble"
+                :class="m.role === 'user' ? 'is-user' : 'is-twin'"
+                @longpress="copyMsg(m)"
+              >
+                <image
+                  v-if="m.image"
+                  class="msg-bubble-img"
+                  :src="m.image"
+                  mode="widthFix"
+                  @tap.stop="previewMsgImage(m.image)"
+                />
+                <text
+                  v-if="m.content && !(m.image && m.content === '（附图）')"
+                  class="msg-bubble-text"
+                >{{ m.content }}</text>
+              </view>
+            </view>
+            <image
+              v-if="m.role === 'user'"
+              class="msg-avatar is-me"
+              :src="userAvatarSrc"
+              mode="aspectFill"
+            />
+          </template>
+        </view>
+        <view v-if="sceneThinking" id="msg-thinking" class="msg-row is-twin">
+          <image class="msg-avatar" :src="avatarSrc" mode="aspectFill" />
+          <view class="msg-col is-twin">
+            <view class="msg-bubble is-twin">
+              <view class="typing-dots">
+                <view class="typing-dot" />
+                <view class="typing-dot" />
+                <view class="typing-dot" />
+              </view>
+            </view>
+          </view>
+        </view>
+        <view class="stage-chat-tail" />
+      </scroll-view>
+
+      <view v-if="scenePendingImage" class="stage-pending">
+        <image class="stage-pending-thumb" :src="scenePendingImage" mode="aspectFill" />
+        <view class="stage-pending-remove" @tap.stop="clearScenePendingImage">
           <view class="pending-x" />
+        </view>
+      </view>
+
+      <view v-if="feeding" class="feed-status">
+        <text class="feed-status-text">消化中…</text>
+      </view>
+
+      <!-- 微信式：输入条 + 加号面板；键盘只顶整块 composer -->
+      <view class="stage-composer" :style="composerStyle">
+        <view class="stage-input-bar">
+          <textarea
+            v-if="!sceneVoiceMode"
+            v-model="sceneInput"
+            class="scene-input"
+            :focus="sceneInputFocus"
+            :disabled="sceneBusy"
+            :auto-height="true"
+            :maxlength="2000"
+            :show-confirm-bar="false"
+            confirm-type="send"
+            placeholder="说点什么…"
+            placeholder-class="scene-input-ph"
+            :adjust-position="false"
+            :cursor-spacing="16"
+            @focus="onSceneInputFocus"
+            @confirm="sendSceneMsg"
+          />
+          <view
+            v-else
+            class="scene-voice-hold"
+            :class="{ recording: sceneVoiceRecording, recognizing: sceneVoiceRecognizing }"
+            @touchstart.stop="onSceneVoiceStart"
+            @touchend.stop="onSceneVoiceEnd"
+            @touchcancel.stop="onSceneVoiceEnd"
+          >
+            <text class="scene-voice-text">{{ sceneVoiceLabel }}</text>
+          </view>
+          <view
+            class="scene-plus"
+            :class="{ open: plusPanelOpen }"
+            hover-class="scene-plus--active"
+            @tap="togglePlusPanel"
+          >
+            <view class="scene-plus-cross">
+              <view class="plus-bar a" />
+              <view class="plus-bar b" />
+            </view>
+          </view>
+        </view>
+
+        <view v-if="plusPanelOpen" class="plus-panel">
+          <view class="plus-grid">
+            <view class="plus-cell" hover-class="plus-cell--active" @tap="onPlusAction('feed')">
+              <view class="plus-ico-box">
+                <view class="ico-feed">
+                  <view class="ico-feed-bowl" />
+                  <view class="ico-feed-steam s1" />
+                  <view class="ico-feed-steam s2" />
+                </view>
+              </view>
+              <text class="plus-label">投喂</text>
+            </view>
+            <view class="plus-cell" hover-class="plus-cell--active" @tap="onPlusAction('image')">
+              <view class="plus-ico-box">
+                <view class="ico-pic">
+                  <view class="ico-pic-frame" />
+                  <view class="ico-pic-mtn" />
+                  <view class="ico-pic-sun" />
+                </view>
+              </view>
+              <text class="plus-label">图片</text>
+            </view>
+            <view
+              v-if="!sceneVoiceMode"
+              class="plus-cell"
+              hover-class="plus-cell--active"
+              @tap="onPlusAction('voice')"
+            >
+              <view class="plus-ico-box">
+                <view class="ico-mic">
+                  <view class="ico-mic-head" />
+                  <view class="ico-mic-stem" />
+                  <view class="ico-mic-base" />
+                </view>
+              </view>
+              <text class="plus-label">语音</text>
+            </view>
+            <view
+              v-else
+              class="plus-cell"
+              hover-class="plus-cell--active"
+              @tap="onPlusAction('keyboard')"
+            >
+              <view class="plus-ico-box">
+                <view class="ico-kb">
+                  <view class="ico-kb-row r1" />
+                  <view class="ico-kb-row r2" />
+                  <view class="ico-kb-space" />
+                </view>
+              </view>
+              <text class="plus-label">键盘</text>
+            </view>
+          </view>
         </view>
       </view>
     </view>
 
-    <!-- 悬浮按钮：仅兜底模式显示 -->
-    <view v-if="fallback" class="float-btns">
-      <view class="fbtn" hover-class="fbtn--active" @tap="openChat">
-        <text class="fbtn-text">对话</text>
-      </view>
-      <view class="fbtn" hover-class="fbtn--active" @tap="openTreasure">
-        <text class="fbtn-text">百宝箱</text>
-      </view>
-    </view>
-
-    <TreasureSheet :show="treasureOpen" @close="treasureOpen = false" />
-    <AiChatSheet :show="chatOpen" twin @close="chatOpen = false" @replied="onReplied" />
+    <TreasureSheet :show="treasureOpen" @close="treasureOpen = false" @action="onTreasureAction" />
+    <TwinFeedSheet
+      v-if="feedOpen"
+      :show="feedOpen"
+      @close="feedOpen = false"
+      @confirm="startFeeding"
+    />
+    <TwinRecipeSheet v-if="recipeOpen" :show="recipeOpen" @close="recipeOpen = false" />
+    <TwinProfileSheet v-if="profileOpen" :show="profileOpen" @close="profileOpen = false" />
+    <TwinPersonaSheet v-if="personaOpen" :show="personaOpen" @close="personaOpen = false" />
+    <TwinStatusSheet
+      v-if="statusOpen"
+      :show="statusOpen"
+      @close="statusOpen = false"
+      @saved="onStatusSaved"
+    />
+    <TwinMemorySheet v-if="memoryOpen" :show="memoryOpen" @close="memoryOpen = false" />
   </view>
 </template>
 
 <script setup>
 /**
- * 3D 舞台：模型即入口
- * - 点法宝区域 → 百宝箱（按命中点高度区域判定）
- * - 点其他部位 → 分身对话
- * - 模型下载后缓存本地（USER_DATA_PATH），按 fileID 失效
- * - 失败兜底：图片形象 + 悬浮按钮，功能不瘫痪
+ * 分身舞台：全屏聊天 + 顶栏 3D；投喂/人设等并入本页，不再跳分身页/弹聊天框
  */
 import * as THREE from '../../libs/build/three.module.js'
 import { WechatPlatform } from '../../libs/src/WechatPlatform/index.js'
 import { GLTFLoader } from '../../libs/examples/jsm/loaders/GLTFLoader.js'
 import { loadOwnerFlag, isOwnerSync } from '@/utils/owner'
 import TreasureSheet from '../../components/TreasureSheet.vue'
-import AiChatSheet from '@/components/AiChatSheet.vue'
-import { sendTwinText } from '@/api/twinChat'
-import XiaoheiImageIcon from '@/code-assist/components/ImageIcon.vue'
-import XiaoheiMicIcon from '@/code-assist/components/MicIcon.vue'
+import TwinFeedSheet from '@/components/TwinFeedSheet.vue'
+import TwinRecipeSheet from '@/components/TwinRecipeSheet.vue'
+import TwinProfileSheet from '@/components/TwinProfileSheet.vue'
+import TwinPersonaSheet from '@/components/TwinPersonaSheet.vue'
+import TwinStatusSheet from '@/components/TwinStatusSheet.vue'
+import TwinMemorySheet from '@/components/TwinMemorySheet.vue'
+import { sendTwinText, setTwinManualFeedBusy } from '@/api/twinChat'
+import {
+  loadChat,
+  saveChat,
+  getGrowth,
+  getStatus,
+  getAvatar,
+  getPersona,
+  listMemories,
+  emptyStatus,
+  uploadTwinAvatar,
+  digestTwinMaterial,
+  addFeedRecord,
+  addGrowthExp,
+  addMemoryUnique,
+  replaceTaggedMemory,
+  stageForLevel,
+  expToNext,
+  calcFeedExp,
+  isStatusPlanFresh,
+} from '@/api/aiTwin'
 import { compressImageForChat } from '@/code-assist/api'
 import { startVoiceInput, stopVoiceInput, cancelVoiceInput } from '@/code-assist/voiceInput'
+import { getPhotoTempUrls } from '@/api/album'
 
 /** 云存储模型 fileID（控制台上传 twin/model/twin-model.glb） */
 const TWIN_MODEL_FILE_ID =
   'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/twin/model/twin-model.glb'
+
+/** 聊天「我」侧头像 */
+const USER_AVATAR_FILE_ID =
+  'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/album/3281793004017_.pic.jpg'
 
 /** 运行时解析 fileID（支持存储覆盖）；不直接判常量，避免打包器把空值分支折叠掉 */
 function resolveModelFileId() {
@@ -161,48 +403,341 @@ const BALL_REGION = {
   zFront: 0.06,
 }
 
-/** 舞台背景图（控制台上传，经 getMusicUrl 管理端换链读取） */
-const BG_FILE_ID =
-  'cloud://cloudbase-d7g0orq1z360a029f.636c-cloudbase-d7g0orq1z360a029f-1304836152/twin/去人猫补全白墙背景.png'
+const QUICK_CHIPS_FALLBACK = ['今天过得怎么样', '随便聊聊', '你在干嘛']
+const TIME_GAP_MS = 5 * 60 * 1000
 
 const loading = ref(true)
 const fallback = ref(false)
 const loadText = ref('初始化…')
 const loadPct = ref(0)
-const bgUrl = ref('')
 const treasureOpen = ref(false)
-const chatOpen = ref(false)
+const feedOpen = ref(false)
+const recipeOpen = ref(false)
+const profileOpen = ref(false)
+const personaOpen = ref(false)
+const statusOpen = ref(false)
+const memoryOpen = ref(false)
 const sceneInput = ref('')
 const sceneInputFocus = ref(false)
 const sceneThinking = ref(false)
 const sceneBusy = ref(false)
-const typedReply = ref('')
-const bubbleDismissed = ref(false)
+const sceneMessages = ref([])
+const scrollInto = ref('')
 const sceneKbHeight = ref(0)
 const scenePendingImage = ref('')
 const sceneVoiceMode = ref(false)
 const sceneVoiceRecording = ref(false)
 const sceneVoiceRecognizing = ref(false)
+const plusPanelOpen = ref(false)
+const statusBarHeight = ref(20)
+const windowHeight = ref(667)
+const sheetTop = ref(220)
+const sheetDragging = ref(false)
+const chatExpanded = ref(false)
+const chatScrollTop = ref(0)
 
-let typedTimer = null
+const avatarSrc = ref('/static/twin/avatar.png')
+/** 分包里 cloud:// 会被当成相对路径，必须用 https 临时链（同相册预览 getPhotoTempUrls） */
+const userAvatarSrc = ref('')
+const avatarBusy = ref(false)
+const growth = ref({ level: 1, exp: 0, totalFeeds: 0, totalChars: 0 })
+const status = ref(emptyStatus())
+const memories = ref([])
+const greetText = ref('')
+const feedingPhase = ref('idle')
+const flyTier = ref('feast')
+const flyGo = ref(false)
+const floatText = ref('')
+const autoFeedFx = ref(null)
+const evolveInfo = ref(null)
+
+let greetTimer = null
+let evolveTimer = null
+let extrasLoaded = false
+let extrasPromise = null
+const feeding = computed(function () {
+  return feedingPhase.value !== 'idle'
+})
+const stage = computed(function () {
+  return stageForLevel(growth.value.level)
+})
+const expNext = computed(function () {
+  return expToNext(growth.value.level)
+})
+const expPct = computed(function () {
+  const next = expNext.value || 1
+  return Math.min(100, Math.floor(((growth.value.exp || 0) / next) * 100))
+})
+
+const hasChatMsgs = computed(function () {
+  const list = sceneMessages.value
+  for (let i = 0; i < list.length; i++) {
+    const r = list[i].role
+    if (r === 'user' || r === 'assistant') return true
+  }
+  return false
+})
+
+const displayChips = computed(function () {
+  const chips = []
+  const st = status.value || {}
+  const doing = (st.nowDoing || '').trim()
+  const next = (st.nextActions || '').trim()
+  if (doing) chips.push('你还在' + doing.slice(0, 12) + '吗？')
+  if (next) chips.push('提醒我：' + next.slice(0, 14))
+  for (let i = 0; i < QUICK_CHIPS_FALLBACK.length && chips.length < 3; i++) {
+    chips.push(QUICK_CHIPS_FALLBACK[i])
+  }
+  return chips.slice(0, 3)
+})
+
+const displayMessages = computed(function () {
+  const list = sceneMessages.value
+  const out = []
+  let lastAt = 0
+  let lastRole = ''
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i]
+    const item = {
+      role: m.role,
+      content: m.content || '',
+      image: m.image || '',
+      at: m.at || 0,
+      showTime: false,
+      timeLabel: '',
+    }
+    if (m.role !== 'system' && item.at) {
+      const gap = item.at - lastAt
+      if (!lastAt || gap > TIME_GAP_MS || m.role !== lastRole) {
+        item.showTime = true
+        item.timeLabel = formatMsgTime(item.at)
+      }
+      lastAt = item.at
+      lastRole = m.role
+    }
+    out.push(item)
+  }
+  return out
+})
+
 let kbBound = false
+
+function pad2(n) {
+  return n < 10 ? '0' + n : '' + n
+}
+
+function formatMsgTime(at) {
+  const d = new Date(at)
+  const now = new Date()
+  const hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  if (sameDay) return hm
+  return d.getMonth() + 1 + '/' + d.getDate() + ' ' + hm
+}
+
+function copyMsg(m) {
+  const text = (m && m.content) || ''
+  if (!text) return
+  uni.setClipboardData({
+    data: text,
+    success: function () {
+      uni.showToast({ title: '已复制', icon: 'none' })
+    },
+  })
+}
+
+function previewMsgImage(src) {
+  if (!src) return
+  uni.previewImage({ urls: [src], current: src })
+}
 
 /** 模型本地路径：onMounted 提前启动，与画布初始化并行 */
 let modelPathPromise = null
 
-/** 键盘弹出时输入条上浮到键盘上方，页面本体不动 */
-const inputBarStyle = computed(function () {
-  if (sceneKbHeight.value > 0) {
-    return { bottom: sceneKbHeight.value + 8 + 'px' }
-  }
-  return {}
+/** Sheet 收起顶边 = 短 hero 高度；展开顶边 = 状态栏缝 */
+const expandedTop = computed(function () {
+  return statusBarHeight.value + 12
+})
+const collapsedTop = computed(function () {
+  return Math.round(windowHeight.value * 0.32) + statusBarHeight.value
+})
+/** 0 收起 → 1 全屏 */
+const sheetProgress = computed(function () {
+  const c = collapsedTop.value
+  const e = expandedTop.value
+  const span = c - e
+  if (span <= 0) return 0
+  return Math.max(0, Math.min(1, (c - sheetTop.value) / span))
 })
 
-const canSceneSend = computed(function () {
-  if (sceneBusy.value) return false
-  const hasText = !!(sceneInput.value || '').trim()
-  return hasText || !!scenePendingImage.value
+const heroCombinedStyle = computed(function () {
+  const p = sheetProgress.value
+  return {
+    height: collapsedTop.value + 'px',
+    opacity: 1 - p * 0.65,
+    transform: 'scale(' + (1 - p * 0.04) + ')',
+  }
 })
+
+/** 仅让出状态栏，模型上移对齐胶囊 */
+const canvasWrapStyle = computed(function () {
+  return { top: statusBarHeight.value + 'px' }
+})
+
+const chatSheetStyle = computed(function () {
+  const p = sheetProgress.value
+  const radius = Math.round(28 * (1 - p))
+  const style = {
+    top: sheetTop.value + 'px',
+    borderRadius: radius + 'rpx ' + radius + 'rpx 0 0',
+  }
+  if (!sheetDragging.value) {
+    style.transition = 'top 0.32s cubic-bezier(0.32, 0.72, 0, 1), border-radius 0.32s ease'
+  }
+  return style
+})
+
+/** 同小黑：只抬输入条；禁止 stage-chat translateY 顶整页 */
+const composerStyle = computed(function () {
+  if (!sceneKbHeight.value) return {}
+  return { marginBottom: sceneKbHeight.value + 'px' }
+})
+
+/* ---------- 聊天 Sheet 手势 ---------- */
+let sheetTouch = null
+
+function clampSheetTop(v) {
+  const lo = expandedTop.value
+  const hi = collapsedTop.value
+  if (v < lo) return lo
+  if (v > hi) return hi
+  return v
+}
+
+function syncRafWithSheet() {
+  if (chatExpanded.value) {
+    stopRaf()
+    return
+  }
+  if (canvasNode && renderer && !loading.value && !fallback.value) startRaf()
+}
+
+function snapSheet(forceExpand) {
+  sheetDragging.value = false
+  let expand = !!forceExpand
+  if (forceExpand === undefined || forceExpand === null) {
+    const mid = (collapsedTop.value + expandedTop.value) / 2
+    expand = sheetTop.value < mid
+    if (sheetTouch && sheetTouch.velY !== undefined) {
+      if (sheetTouch.velY < -0.45) expand = true
+      else if (sheetTouch.velY > 0.45) expand = false
+    }
+  }
+  chatExpanded.value = expand
+  sheetTop.value = expand ? expandedTop.value : collapsedTop.value
+  sheetTouch = null
+  syncRafWithSheet()
+}
+
+function onGrabberTouchStart(e) {
+  const t = e.touches && e.touches[0]
+  if (!t) return
+  sheetDragging.value = true
+  const y = t.clientY != null ? t.clientY : t.y
+  sheetTouch = {
+    startY: y,
+    startTop: sheetTop.value,
+    lastY: y,
+    lastT: Date.now(),
+    velY: 0,
+    claimed: true,
+  }
+}
+
+function onGrabberTouchMove(e) {
+  if (!sheetTouch) return
+  const t = e.touches && e.touches[0]
+  if (!t) return
+  const y = t.clientY != null ? t.clientY : t.y
+  const now = Date.now()
+  const dt = Math.max(1, now - sheetTouch.lastT)
+  sheetTouch.velY = (y - sheetTouch.lastY) / dt
+  sheetTouch.lastY = y
+  sheetTouch.lastT = now
+  sheetTop.value = clampSheetTop(sheetTouch.startTop + (y - sheetTouch.startY))
+}
+
+function onGrabberTouchEnd() {
+  if (!sheetTouch) {
+    sheetDragging.value = false
+    return
+  }
+  snapSheet()
+}
+
+function onChatScroll(e) {
+  const d = e && e.detail
+  chatScrollTop.value = (d && d.scrollTop) || 0
+}
+
+function onScrollTouchStart(e) {
+  if (sheetDragging.value) return
+  const t = e.touches && e.touches[0]
+  if (!t) return
+  const y = t.clientY != null ? t.clientY : t.y
+  sheetTouch = {
+    startY: y,
+    startTop: sheetTop.value,
+    lastY: y,
+    lastT: Date.now(),
+    velY: 0,
+    claimed: false,
+  }
+}
+
+function onScrollTouchMove(e) {
+  if (!sheetTouch) return
+  const t = e.touches && e.touches[0]
+  if (!t) return
+  const y = t.clientY != null ? t.clientY : t.y
+  const dy = y - sheetTouch.startY
+  if (!sheetTouch.claimed) {
+    if (!chatExpanded.value && dy < -10) {
+      sheetTouch.claimed = true
+      sheetDragging.value = true
+      sheetTouch.startTop = sheetTop.value
+      sheetTouch.startY = y
+    } else if (chatExpanded.value && chatScrollTop.value <= 2 && dy > 10) {
+      sheetTouch.claimed = true
+      sheetDragging.value = true
+      sheetTouch.startTop = sheetTop.value
+      sheetTouch.startY = y
+    } else if (Math.abs(dy) > 12) {
+      sheetTouch = null
+      return
+    } else {
+      return
+    }
+  }
+  const now = Date.now()
+  const dt = Math.max(1, now - sheetTouch.lastT)
+  sheetTouch.velY = (y - sheetTouch.lastY) / dt
+  sheetTouch.lastY = y
+  sheetTouch.lastT = now
+  sheetTop.value = clampSheetTop(sheetTouch.startTop + (y - sheetTouch.startY))
+}
+
+function onScrollTouchEnd() {
+  if (!sheetTouch) return
+  if (sheetTouch.claimed) {
+    snapSheet()
+    return
+  }
+  sheetTouch = null
+}
 
 const sceneVoiceLabel = computed(function () {
   if (sceneVoiceRecognizing.value) return '识别中…'
@@ -214,8 +749,28 @@ function bindKeyboard() {
   if (kbBound) return
   kbBound = true
   uni.onKeyboardHeightChange(function (res) {
-    sceneKbHeight.value = (res && res.height) || 0
+    const h = (res && res.height) || 0
+    const prev = sceneKbHeight.value
+    sceneKbHeight.value = h
+    if (h > 0 && prev <= 0) scrollChatToBottom()
   })
+}
+
+function unbindKeyboard() {
+  if (!kbBound) return
+  kbBound = false
+  try {
+    uni.offKeyboardHeightChange()
+  } catch (e) {
+    // ignore
+  }
+  sceneKbHeight.value = 0
+}
+
+function sendQuickChip(text) {
+  if (!text || sceneBusy.value) return
+  sceneInput.value = text
+  sendSceneMsg()
 }
 
 let canvasNode = null
@@ -235,32 +790,79 @@ let modelBox = null
 /* ---------- 生命周期 ---------- */
 
 onMounted(async function () {
+  try {
+    const sys = uni.getSystemInfoSync()
+    statusBarHeight.value = sys.statusBarHeight || 20
+    windowHeight.value = sys.windowHeight || 667
+  } catch (e) {
+    // ignore
+  }
+  sheetTop.value = collapsedTop.value
+  chatExpanded.value = false
   // 身份判定不阻塞舞台：云函数 login 与模型下载并行跑
   loadOwnerFlag().catch(function () {})
   bindKeyboard()
   modelPathPromise = fetchModelPath()
-  loadStageBg()
-  initStage()
+  resolveUserAvatar()
+  // 等 hero 布局完成后再量 canvas，避免高度为 0
+  nextTick(function () {
+    initStage()
+  })
+  refreshSceneChat().catch(function (err) {
+    console.warn('舞台对话历史加载失败', err)
+  })
+  loadTwinCritical()
+    .then(function () {
+      showGreeting()
+    })
+    .catch(function (err) {
+      console.warn('分身资料加载失败', err)
+      showGreeting()
+    })
+  loadTwinExtras().catch(function (err) {
+    console.warn('分身扩展加载失败', err)
+  })
 })
 
-/** 背景图换链：getMusicUrl 管理端权限（存储权限不影响），失败静默保留渐变底 */
-function loadStageBg() {
-  wx.cloud.callFunction({
-    name: 'getMusicUrl',
-    data: { fileID: BG_FILE_ID },
-    success: function (res) {
-      const body = (res && res.result) || {}
-      if (body.ok && body.tempFileURL) bgUrl.value = body.tempFileURL
-    },
-    fail: function (err) {
-      console.warn('舞台背景图换链失败', err)
-    },
-  })
+/** 分包内 cloud:// 会变成相对路径；先客户端换链，相册权限不够再走 getMusicUrl */
+function cloudFileToHttps(fileID) {
+  if (!fileID || String(fileID).indexOf('cloud://') !== 0) {
+    return Promise.resolve(fileID || '')
+  }
+  return getPhotoTempUrls([fileID])
+    .then(function (urls) {
+      if (urls && urls[0]) return urls[0]
+      return wx.cloud
+        .callFunction({
+          name: 'getMusicUrl',
+          data: { fileID: fileID },
+        })
+        .then(function (res) {
+          const body = (res && res.result) || {}
+          if (body.ok && body.tempFileURL) return body.tempFileURL
+          console.warn('getMusicUrl 换链失败', body.errMsg || body)
+          return ''
+        })
+    })
+}
+
+function resolveUserAvatar() {
+  cloudFileToHttps(USER_AVATAR_FILE_ID)
+    .then(function (url) {
+      if (url) {
+        userAvatarSrc.value = url
+        return
+      }
+      console.warn('用户头像换链为空')
+    })
+    .catch(function (err) {
+      console.warn('用户头像换链失败', err)
+    })
 }
 
 onShow(function () {
-  // 回前台恢复渲染（未初始化完成/兜底模式时不启动）
-  if (canvasNode && renderer && !loading.value && !fallback.value) startRaf()
+  // 回前台恢复渲染（Sheet 全屏展开时不跑 3D）
+  syncRafWithSheet()
 })
 
 onHide(function () {
@@ -268,8 +870,16 @@ onHide(function () {
 })
 
 onUnmounted(function () {
+  unbindKeyboard()
+  if (greetTimer) {
+    clearTimeout(greetTimer)
+    greetTimer = null
+  }
+  if (evolveTimer) {
+    clearTimeout(evolveTimer)
+    evolveTimer = null
+  }
   stopRaf()
-  clearBubbleTimers()
   cancelVoiceInput()
   if (mixer) mixer.stopAllAction()
   if (modelRoot) {
@@ -293,7 +903,7 @@ onUnmounted(function () {
 
 /* ---------- 初始化 ---------- */
 
-function initStage() {
+function initStage(retry) {
   loadText.value = '获取模型…'
   const query = uni.createSelectorQuery()
   query
@@ -302,6 +912,17 @@ function initStage() {
     .exec(function (res) {
       if (!res || !res[0] || !res[0].node) {
         enterFallback('画布不可用')
+        return
+      }
+      // hero 首帧可能尚未算出高度，短暂重试
+      if ((!res[0].width || !res[0].height) && (retry || 0) < 8) {
+        setTimeout(function () {
+          initStage((retry || 0) + 1)
+        }, 50)
+        return
+      }
+      if (!res[0].width || !res[0].height) {
+        enterFallback('画布尺寸异常')
         return
       }
       try {
@@ -355,8 +976,9 @@ function setupCanvas(info) {
   renderer.outputEncoding = THREE.sRGBEncoding
 
   scene = new THREE.Scene()
-  camera = new THREE.PerspectiveCamera(42, cssW / cssH, 0.1, 200)
-  camera.position.set(0, 0.15, 3)
+  // 矮窗全身：略远，避免脚被裁
+  camera = new THREE.PerspectiveCamera(38, cssW / cssH, 0.1, 200)
+  camera.position.set(0, 0.1, 2.8)
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x333344, 1.0))
   const dir = new THREE.DirectionalLight(0xffffff, 1.3)
@@ -535,7 +1157,8 @@ function buildModel(gltf) {
   modelRoot.position.y -= center.y
   modelRoot.position.z -= center.z
   const maxDim = Math.max(size.x, size.y, size.z) || 1
-  camera.position.set(0, size.y * 0.18, maxDim * 1.75)
+  // 拉远缩小，全身进矮窗，脚不被聊天区裁掉
+  camera.position.set(0, size.y * 0.02, maxDim * 2.05)
   camera.lookAt(0, 0, 0)
 
   // 转台结构：父组管俯仰（上下），子节点管偏航（左右）
@@ -621,50 +1244,103 @@ function handleTap(x, y) {
   // 的平移，返回未居中坐标；须再减 center 才是 BALL_REGION 实测所在的居中空间
   const center = modelBox.getCenter(new THREE.Vector3())
   const local = modelRoot.worldToLocal(hit.point.clone()).sub(center)
-  if (
-    local.y >= BALL_REGION.yMin &&
-    local.y <= BALL_REGION.yMax &&
-    local.z >= BALL_REGION.zFront
-  ) {
+  if (local.y >= BALL_REGION.yMin && local.y <= BALL_REGION.yMax && local.z >= BALL_REGION.zFront) {
     openTreasure()
   }
 }
 
-/* ---------- 场景内对话 ---------- */
+/* ---------- 全屏对话 ---------- */
+
+async function refreshSceneChat() {
+  try {
+    const prev = sceneMessages.value
+    const list = (await loadChat()) || []
+    const out = []
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i]
+      if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue
+      const content = m.content != null ? String(m.content) : ''
+      if (!content) continue
+      const item = { role: m.role, content: content }
+      if (m.at) item.at = m.at
+      out.push(item)
+    }
+    // 云端不存图：按顺序把本地用户消息的临时图拼回
+    let prevUser = 0
+    for (let i = 0; i < out.length; i++) {
+      if (out[i].role !== 'user') continue
+      while (prevUser < prev.length) {
+        const p = prev[prevUser]
+        prevUser += 1
+        if (p.role !== 'user') continue
+        if (p.image) out[i].image = p.image
+        break
+      }
+    }
+    const localExtras = []
+    for (let j = 0; j < prev.length; j++) {
+      if (prev[j].role === 'system') localExtras.push(prev[j])
+    }
+    sceneMessages.value = out.concat(localExtras)
+  } catch (err) {
+    console.warn('刷新舞台对话失败', err)
+  }
+  scrollChatToBottom()
+}
+
+function scrollChatToBottom() {
+  nextTick(function () {
+    scrollInto.value = ''
+    nextTick(function () {
+      if (sceneThinking.value) {
+        scrollInto.value = 'msg-thinking'
+        return
+      }
+      const n = sceneMessages.value.length
+      if (n > 0) scrollInto.value = 'msg-' + (n - 1)
+    })
+  })
+}
 
 async function sendSceneMsg() {
   const t = (sceneInput.value || '').trim()
   const img = scenePendingImage.value
   if ((!t && !img) || sceneBusy.value) return
+  closePlusPanel()
+  // 一发送就收起键盘，等回复时不被挡住
+  sceneInputFocus.value = false
   sceneBusy.value = true
   sceneInput.value = ''
   scenePendingImage.value = ''
-  clearBubbleTimers()
-  bubbleDismissed.value = false
+  const now = Date.now()
+  const userMsg = { role: 'user', content: t || '', at: now }
+  if (img) {
+    userMsg.image = img
+    if (!userMsg.content) userMsg.content = '（附图）'
+  }
+  sceneMessages.value.push(userMsg)
   sceneThinking.value = true
-  typedReply.value = ''
+  scrollChatToBottom()
   try {
-    let reply
+    let sendRes = null
     if (img) {
       const compressed = await compressImageForChat(img)
-      reply = await sendTwinText(t, compressed)
+      sendRes = await sendTwinText(t, compressed)
     } else {
-      reply = await sendTwinText(t)
+      sendRes = await sendTwinText(t)
     }
     sceneThinking.value = false
-    typewrite(reply)
+    await refreshSceneChat()
+    if (sendRes && sendRes.autoFeed) await applyAutoFeedResult(sendRes.autoFeed)
   } catch (err) {
     console.error('场景对话失败', err)
     sceneThinking.value = false
+    refreshSceneChat().catch(function () {})
     uni.showToast({ title: String((err && err.message) || '回复失败').slice(0, 30), icon: 'none' })
   } finally {
     sceneBusy.value = false
-    if (!sceneVoiceMode.value) {
-      sceneInputFocus.value = false
-      nextTick(function () {
-        sceneInputFocus.value = true
-      })
-    }
+    // 发送后收起键盘，避免挡住分身回复；继续聊时点输入框即可
+    sceneInputFocus.value = false
   }
 }
 
@@ -693,15 +1369,46 @@ function clearScenePendingImage() {
   scenePendingImage.value = ''
 }
 
-function toggleSceneVoice() {
+function enterSceneVoice() {
   if (sceneBusy.value || sceneVoiceRecording.value) return
-  sceneVoiceMode.value = !sceneVoiceMode.value
-  if (sceneVoiceMode.value) {
-    // 收起键盘，聚焦让位给按住说话长条
-    sceneInputFocus.value = false
-  } else {
+  sceneVoiceMode.value = true
+  sceneInputFocus.value = false
+}
+
+function exitSceneVoice() {
+  if (sceneVoiceRecording.value || sceneVoiceRecognizing.value) {
     cancelVoiceInput()
+    sceneVoiceRecording.value = false
+    sceneVoiceRecognizing.value = false
   }
+  sceneVoiceMode.value = false
+}
+
+function closePlusPanel() {
+  plusPanelOpen.value = false
+}
+
+/** 微信式：点 + 收起键盘、展开图标面板；再点收起（+ 转 ×） */
+function togglePlusPanel() {
+  if (sceneBusy.value) return
+  if (plusPanelOpen.value) {
+    closePlusPanel()
+    return
+  }
+  sceneInputFocus.value = false
+  plusPanelOpen.value = true
+}
+
+function onSceneInputFocus() {
+  closePlusPanel()
+}
+
+function onPlusAction(kind) {
+  closePlusPanel()
+  if (kind === 'feed') openFeed()
+  else if (kind === 'image') pickSceneImage()
+  else if (kind === 'voice') enterSceneVoice()
+  else if (kind === 'keyboard') exitSceneVoice()
 }
 
 function onSceneVoiceStart() {
@@ -735,45 +1442,336 @@ function onSceneVoiceEnd() {
 
 /* ---------- 功能入口 ---------- */
 
-function openChat() {
-  chatOpen.value = true
-}
-
 function openTreasure() {
   treasureOpen.value = true
 }
 
-/** 面板回复同步到头顶气泡，打字机逐字输出，回复常驻显示 */
-function onReplied(reply) {
-  typewrite(String(reply || '').trim())
+function onGrowthTap() {
+  uni.showActionSheet({
+    itemList: ['投喂', '打开百宝箱'],
+    success: function (res) {
+      if (res.tapIndex === 0) openFeed()
+      else if (res.tapIndex === 1) openTreasure()
+    },
+  })
 }
 
-/** ✕ 关闭气泡：只隐藏当前这条，下一条回复到达时 typewrite 会自动重现 */
-function dismissBubble() {
-  bubbleDismissed.value = true
-  typedReply.value = ''
-  clearBubbleTimers()
+function onTreasureAction(action) {
+  if (action === 'feed') openFeed()
+  else if (action === 'recipe') recipeOpen.value = true
+  else if (action === 'persona') personaOpen.value = true
+  else if (action === 'status') statusOpen.value = true
+  else if (action === 'memory') memoryOpen.value = true
+  else if (action === 'profile') profileOpen.value = true
+  else if (action === 'clearChat') clearSceneChat()
+  else if (action === 'avatar') pickAvatar()
 }
 
-function clearBubbleTimers() {
-  if (typedTimer) clearInterval(typedTimer)
-  typedTimer = null
+function clearSceneChat() {
+  uni.showModal({
+    title: '清空对话',
+    content: '确定清空与分身的聊天记录？',
+    success: function (res) {
+      if (!res.confirm) return
+      saveChat([])
+        .then(function () {
+          sceneMessages.value = []
+          uni.showToast({ title: '已清空', icon: 'none' })
+        })
+        .catch(function (err) {
+          console.warn('清空对话失败', err)
+          uni.showToast({ title: '清空失败', icon: 'none' })
+        })
+    },
+  })
 }
 
-function typewrite(reply) {
-  if (!reply) return
-  clearBubbleTimers()
-  bubbleDismissed.value = false
-  typedReply.value = ''
-  let i = 0
-  typedTimer = setInterval(function () {
-    i += 1
-    typedReply.value = reply.slice(0, i)
-    if (i >= reply.length) {
-      clearInterval(typedTimer)
-      typedTimer = null
+/* ---------- 分身成长 / 投喂 / 人设 ---------- */
+
+async function loadTwinCritical() {
+  const parts = await Promise.all([getAvatar(), getGrowth(), getStatus()])
+  const avatar = parts[0]
+  if (avatar && avatar.mainFileID) {
+    const url = await cloudFileToHttps(avatar.mainFileID)
+    avatarSrc.value = url || '/static/twin/avatar.png'
+  } else {
+    avatarSrc.value = '/static/twin/avatar.png'
+  }
+  growth.value = parts[1]
+  status.value = parts[2]
+}
+
+async function loadTwinExtras() {
+  if (extrasLoaded) return
+  if (extrasPromise) {
+    await extrasPromise
+    return
+  }
+  extrasPromise = Promise.all([getPersona(), listMemories()])
+    .then(function (parts) {
+      memories.value = parts[1] || []
+      extrasLoaded = true
+      extrasPromise = null
+      if (greetText.value) showGreeting()
+    })
+    .catch(function (err) {
+      extrasPromise = null
+      throw err
+    })
+  await extrasPromise
+}
+
+async function ensureExtras() {
+  if (extrasLoaded) return
+  await loadTwinExtras()
+}
+
+function greetingName() {
+  for (let i = 0; i < memories.value.length; i++) {
+    const m = memories.value[i]
+    if (m && m.qid === 'pq_call' && m.text) {
+      return m.text.replace(/^【[^】]*】/, '').trim() || '主人'
     }
-  }, 40)
+  }
+  return '主人'
+}
+
+function buildGreeting() {
+  const h = new Date().getHours()
+  let head = ''
+  if (h >= 5 && h < 10) head = '早上好'
+  else if (h < 14) head = '中午好'
+  else if (h < 19) head = '下午好'
+  else if (h < 23) head = '晚上好'
+  else head = '这么晚还没睡？'
+  let text = head + '，' + greetingName() + '。'
+  if (isStatusPlanFresh(status.value)) {
+    const plan = (status.value.nextActions || '').slice(0, 24)
+    if (plan) text += '对了——' + plan + '，别忘了。'
+  }
+  return text
+}
+
+function showGreeting() {
+  greetText.value = buildGreeting()
+  if (greetTimer) clearTimeout(greetTimer)
+  greetTimer = setTimeout(function () {
+    greetText.value = ''
+    greetTimer = null
+  }, 6000)
+}
+
+function onGreetTap() {
+  greetText.value = ''
+  if (!sceneVoiceMode.value) {
+    sceneInputFocus.value = false
+    nextTick(function () {
+      sceneInputFocus.value = true
+    })
+  }
+}
+
+async function onStatusSaved() {
+  try {
+    status.value = await getStatus()
+  } catch (err) {
+    console.warn('状态刷新失败', err)
+  }
+}
+
+function pickAvatar() {
+  avatarBusy.value = true
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    success: async function (res) {
+      const path = res.tempFilePaths && res.tempFilePaths[0]
+      if (!path) {
+        avatarBusy.value = false
+        return
+      }
+      try {
+        const fileID = await uploadTwinAvatar(path)
+        const url = await cloudFileToHttps(fileID)
+        avatarSrc.value = url || fileID
+        uni.showToast({ title: '形象已更新', icon: 'none' })
+      } catch (err) {
+        console.error('上传形象失败', err)
+        uni.showToast({ title: '上传失败', icon: 'none' })
+      }
+      avatarBusy.value = false
+    },
+    fail: function () {
+      avatarBusy.value = false
+    },
+  })
+}
+
+function openFeed() {
+  if (feeding.value) {
+    uni.showToast({ title: '正在进食中…', icon: 'none' })
+    return
+  }
+  feedOpen.value = true
+}
+
+function wait(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms)
+  })
+}
+
+async function startFeeding(payload) {
+  if (feeding.value) return
+  feedOpen.value = false
+  setTwinManualFeedBusy(true)
+  flyTier.value = payload.tier || 'feast'
+  flyGo.value = false
+  feedingPhase.value = 'flying'
+  const digestPromise = runDigest(payload)
+
+  await wait(60)
+  flyGo.value = true
+  await wait(940)
+  feedingPhase.value = 'digesting'
+
+  let result = null
+  try {
+    result = await digestPromise
+  } catch (err) {
+    console.error('投喂消化失败', err)
+    feedingPhase.value = 'idle'
+    setTwinManualFeedBusy(false)
+    const msg = (err && err.message) || '消化失败'
+    uni.showToast({ title: String(msg).slice(0, 40), icon: 'none' })
+    return
+  }
+
+  floatText.value = '+' + result.exp
+  await wait(1200)
+  floatText.value = ''
+  feedingPhase.value = 'idle'
+  setTwinManualFeedBusy(false)
+
+  sceneMessages.value.push({
+    role: 'system',
+    content: '已消化 · 灵气 +' + result.exp,
+    at: Date.now(),
+  })
+  scrollChatToBottom()
+
+  if (result.levelUp) showEvolve(result)
+}
+
+/** 聊天达量自动投喂：Sheet 内光点汇聚动效 → 系统提示 */
+async function applyAutoFeedResult(af) {
+  if (!af) return
+  growth.value = {
+    level: af.level,
+    exp: af.growthExp,
+    totalFeeds: af.totalFeeds,
+    totalChars: af.totalChars,
+  }
+  autoFeedFx.value = { exp: af.exp }
+  await wait(1100)
+  autoFeedFx.value = null
+  sceneMessages.value.push({
+    role: 'system',
+    content: '自动投喂 · 灵气 +' + af.exp,
+    at: Date.now(),
+  })
+  scrollChatToBottom()
+  if (af.levelUp) showEvolve(af)
+}
+
+function showEvolve(result) {
+  const title = result.stageUp ? result.stage.label : 'Lv.' + result.level
+  evolveInfo.value = {
+    level: result.level,
+    stageUp: result.stageUp,
+    title: title,
+  }
+  if (evolveTimer) clearTimeout(evolveTimer)
+  evolveTimer = setTimeout(function () {
+    evolveInfo.value = null
+    evolveTimer = null
+  }, 2600)
+}
+
+function uploadFeedFile(filePath, fileName) {
+  return new Promise(function (resolve, reject) {
+    const s = String(fileName || '')
+    const at = s.lastIndexOf('.')
+    const ext = at >= 0 ? s.slice(at + 1).toLowerCase() : 'dat'
+    const cloudPath =
+      'twin/feed-' + Date.now() + '_' + Math.floor(Math.random() * 10000) + '.' + ext
+    wx.cloud.uploadFile({
+      cloudPath: cloudPath,
+      filePath: filePath,
+      success: function (res) {
+        if (res && res.fileID) {
+          resolve(res.fileID)
+          return
+        }
+        reject(new Error('上传失败'))
+      },
+      fail: function (err) {
+        console.error('投喂上传失败', err)
+        reject(new Error((err && err.errMsg) || '上传失败'))
+      },
+    })
+  })
+}
+
+async function runDigest(payload) {
+  let digest = null
+  if (payload.sourceType === 'life' || payload.sourceType === 'text') {
+    digest = await digestTwinMaterial({ text: payload.text })
+  } else {
+    const fileID = await uploadFeedFile(payload.filePath, payload.fileName)
+    digest = await digestTwinMaterial({ fileID: fileID })
+  }
+
+  const exp = calcFeedExp(digest.chars)
+  const title =
+    payload.sourceType === 'text' ? payload.text.slice(0, 16) : payload.fileName || '文件食粮'
+
+  await ensureExtras()
+
+  if (payload.sourceType === 'life') {
+    const r = await replaceTaggedMemory(digest.summary, 'life', memories.value)
+    if (r) {
+      const removedMap = {}
+      for (let i = 0; i < r.removed.length; i++) {
+        removedMap[r.removed[i]._id] = true
+      }
+      memories.value = memories.value.filter(function (m) {
+        return !removedMap[m._id]
+      })
+      memories.value.unshift(r.mem)
+    }
+  } else {
+    const mem = await addMemoryUnique(digest.summary, memories.value)
+    if (mem) memories.value.unshift(mem)
+  }
+
+  await addFeedRecord({
+    title: title,
+    sourceType: payload.sourceType,
+    fileName: payload.fileName || '',
+    chars: digest.chars,
+    exp: exp,
+    summary: digest.summary,
+  })
+
+  const g = await addGrowthExp(exp, digest.chars)
+  growth.value = {
+    level: g.level,
+    exp: g.exp,
+    totalFeeds: g.totalFeeds,
+    totalChars: g.totalChars,
+  }
+  return { exp: exp, levelUp: g.levelUp, stageUp: g.stageUp, stage: g.stage, level: g.level }
 }
 
 /* ---------- 兜底 ---------- */
@@ -793,33 +1791,77 @@ function enterFallback(reason) {
   top: 0;
   bottom: 0;
   overflow: hidden;
-  background: radial-gradient(ellipse 90% 60% at 50% 30%, #241d33 0%, #121018 70%);
+  background: #14101c;
 }
 
-/* 背景图 + 暗色蒙层：透明度对齐 PageRoot 深色页标准（图 0.78 + 蒙层渐变） */
-.stage-bg {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -14%;
-  bottom: 0;
-  width: 100%;
-  height: 115%;
-  opacity: 0.78;
-}
-
-.stage-bg-veil {
+.stage-bg-art {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
   bottom: 0;
-  background: linear-gradient(
-    165deg,
-    rgba(12, 16, 20, 0.42) 0%,
-    rgba(12, 16, 20, 0.32) 48%,
-    rgba(8, 11, 14, 0.38) 100%
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.bg-base {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(165deg, #1e1830 0%, #15101f 48%, #100e18 100%);
+}
+
+.bg-glow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 42%;
+  background: radial-gradient(
+    ellipse 70% 60% at 50% 40%,
+    rgba(232, 200, 120, 0.12) 0%,
+    rgba(154, 123, 255, 0.07) 40%,
+    transparent 72%
   );
+}
+
+.bg-vignette {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: radial-gradient(
+    ellipse 90% 70% at 50% 20%,
+    transparent 45%,
+    rgba(10, 8, 16, 0.4) 100%
+  );
+}
+
+/* 顶栏短 3D：垫底，Sheet 盖上时渐隐 */
+.stage-hero {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  width: 100%;
+  min-height: 280rpx;
+  z-index: 2;
+  overflow: hidden;
+  transform-origin: center top;
+  will-change: opacity, transform;
+}
+
+.stage-canvas-wrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  overflow: hidden;
 }
 
 .stage-canvas {
@@ -833,23 +1875,36 @@ function enterFallback(reason) {
 .stage-fallback {
   position: absolute;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -58%);
+  top: 48%;
+  z-index: 1;
+  transform: translate(-50%, -50%);
 }
 
 .fb-avatar {
-  width: 380rpx;
-  height: 380rpx;
+  width: 160rpx;
+  height: 160rpx;
   border-radius: 50%;
-  border: 4rpx solid rgba(232, 200, 120, 0.5);
-  box-shadow: 0 0 80rpx rgba(232, 200, 120, 0.3);
+  border: 3rpx solid rgba(232, 200, 120, 0.5);
+  box-shadow: 0 0 48rpx rgba(232, 200, 120, 0.28);
+}
+
+.hero-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 36%;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(18, 14, 28, 0.92) 100%);
 }
 
 .stage-loading {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 42%;
   transform: translate(-50%, -50%);
+  z-index: 20;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -961,252 +2016,458 @@ function enterFallback(reason) {
   }
 }
 
-.scene-bubble {
+/* 聊天 Sheet：绝对定位，top 由手势驱动 */
+.stage-chat {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  top: 13%;
-  max-width: 640rpx;
-  padding: 22rpx 30rpx 16rpx;
-  border-radius: 26rpx;
-  background: rgba(22, 18, 33, 0.92);
-  border: 2rpx solid rgba(232, 200, 120, 0.45);
-  box-shadow: 0 8rpx 30rpx rgba(0, 0, 0, 0.45);
-  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgba(18, 14, 28, 0.98);
+  z-index: 7;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-top: 1rpx solid rgba(232, 200, 120, 0.28);
+  box-shadow: 0 -12rpx 40rpx rgba(0, 0, 0, 0.35);
 }
 
-/* 右上角 ✕：点击隐藏当前回复 */
-.scene-bubble-close {
-  position: absolute;
-  top: -16rpx;
-  right: -16rpx;
-  width: 44rpx;
-  height: 44rpx;
-  border-radius: 50%;
+.stage-chat.expanded {
+  border-top-color: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+.stage-chat.dragging {
+  box-shadow: 0 -16rpx 48rpx rgba(0, 0, 0, 0.45);
+}
+
+/* 拖动手：加大热区，金描边胶囊 */
+.chat-grabber-wrap {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(22, 18, 33, 0.95);
-  border: 2rpx solid rgba(232, 200, 120, 0.55);
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.4);
+  min-height: 88rpx;
+  padding: 20rpx 0 16rpx;
+  box-sizing: border-box;
+  background: linear-gradient(
+    180deg,
+    rgba(232, 200, 120, 0.08) 0%,
+    transparent 100%
+  );
 }
 
-.bubble-close-x {
-  width: 18rpx;
-  height: 18rpx;
-  position: relative;
+.chat-grabber-wrap--active {
+  background: linear-gradient(
+    180deg,
+    rgba(232, 200, 120, 0.16) 0%,
+    transparent 100%
+  );
 }
 
-.bubble-close-x::before,
-.bubble-close-x::after {
-  content: '';
+.chat-grabber-pill {
+  width: 120rpx;
+  height: 36rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2rpx solid rgba(232, 200, 120, 0.45);
+  box-sizing: border-box;
+}
+
+.chat-grabber-bar {
+  width: 56rpx;
+  height: 6rpx;
+  border-radius: 999rpx;
+  background: rgba(232, 200, 120, 0.85);
+}
+
+/* 自动投喂：聊天区内光点汇聚 + 灵气飘字 */
+.auto-feed-fx {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100rpx;
+  height: 200rpx;
+  z-index: 12;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.auto-feed-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 160rpx;
+  height: 160rpx;
+  margin-left: -80rpx;
+  margin-top: -80rpx;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(240, 215, 140, 0.35) 0%, transparent 70%);
+  animation: autoFeedGlow 1.1s ease-out forwards;
+}
+
+.auto-feed-orb {
   position: absolute;
   left: 50%;
   top: 50%;
   width: 18rpx;
-  height: 3rpx;
+  height: 18rpx;
   margin-left: -9rpx;
-  margin-top: -1.5rpx;
-  border-radius: 2rpx;
-  background: rgba(240, 215, 140, 0.9);
+  margin-top: -9rpx;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff6d0, #e8c878 50%, #c9a227);
+  box-shadow: 0 0 16rpx rgba(240, 215, 140, 0.6);
 }
 
-.bubble-close-x::before {
-  transform: rotate(45deg);
+.auto-feed-orb.a {
+  animation: autoFeedOrbA 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
-.bubble-close-x::after {
-  transform: rotate(-45deg);
+.auto-feed-orb.b {
+  animation: autoFeedOrbB 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) 0.06s forwards;
 }
 
-/* 下尾巴：指向模型头顶 */
-.scene-bubble::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -16rpx;
-  margin-left: -12rpx;
-  width: 0;
-  height: 0;
-  border-left: 14rpx solid transparent;
-  border-right: 14rpx solid transparent;
-  border-top: 16rpx solid rgba(22, 18, 33, 0.92);
+.auto-feed-orb.c {
+  animation: autoFeedOrbC 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) 0.12s forwards;
 }
 
-.scene-bubble-text {
-  display: block;
-  font-size: 26rpx;
-  color: rgba(255, 248, 235, 0.95);
-  line-height: 1.65;
-  word-break: break-all;
+.auto-feed-plus {
+  position: relative;
+  z-index: 2;
+  font-size: 44rpx;
+  font-weight: 800;
+  color: #f0d78c;
+  text-shadow: 0 0 24rpx rgba(240, 215, 140, 0.55);
+  animation: autoFeedPlus 1.1s ease-out forwards;
+  opacity: 0;
 }
 
-.scene-bubble-history {
-  display: block;
-  margin-top: 10rpx;
-  text-align: right;
-  font-size: 21rpx;
+.auto-feed-label {
+  position: relative;
+  z-index: 2;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  letter-spacing: 2rpx;
   color: rgba(232, 200, 120, 0.75);
-  letter-spacing: 1rpx;
+  animation: autoFeedPlus 1.1s ease-out 0.08s forwards;
+  opacity: 0;
 }
 
-/* 筋斗云输入条：云白渐变 + 淡金描边 */
-.scene-input-bar {
-  position: absolute;
-  left: 30rpx;
-  right: 30rpx;
-  bottom: calc(40rpx + env(safe-area-inset-bottom));
+@keyframes autoFeedGlow {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes autoFeedOrbA {
+  0% {
+    opacity: 0;
+    transform: translate(-90rpx, 40rpx) scale(0.6);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.2);
+  }
+}
+
+@keyframes autoFeedOrbB {
+  0% {
+    opacity: 0;
+    transform: translate(100rpx, 20rpx) scale(0.6);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.2);
+  }
+}
+
+@keyframes autoFeedOrbC {
+  0% {
+    opacity: 0;
+    transform: translate(10rpx, 70rpx) scale(0.6);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.2);
+  }
+}
+
+@keyframes autoFeedPlus {
+  0% {
+    opacity: 0;
+    transform: translateY(16rpx);
+  }
+  25% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-12rpx);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28rpx);
+  }
+}
+
+.stage-chat-scroll {
+  flex: 1;
+  height: 0;
+  min-height: 0;
+  padding: 4rpx 20rpx 0;
+  box-sizing: border-box;
+}
+
+.stage-chat-empty {
+  padding: 56rpx 12rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28rpx;
+}
+
+.stage-chat-empty-text {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.stage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16rpx;
+}
+
+.stage-chip {
+  padding: 14rpx 28rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1rpx solid rgba(232, 200, 120, 0.28);
+}
+
+.stage-chip--active {
+  background: rgba(232, 200, 120, 0.16);
+}
+
+.stage-chip-text {
+  font-size: 24rpx;
+  color: rgba(240, 215, 140, 0.88);
+}
+
+/* 微信式左右行：头像 + 气泡随内容收缩 */
+.msg-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  width: 100%;
+  margin-bottom: 22rpx;
+  box-sizing: border-box;
+}
+
+.msg-row.is-twin {
+  justify-content: flex-start;
+}
+
+.msg-row.is-user {
+  justify-content: flex-end;
+}
+
+.msg-row.is-system {
+  justify-content: center;
+  margin-bottom: 16rpx;
+}
+
+.msg-system {
+  max-width: 80%;
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.msg-system-text {
+  font-size: 22rpx;
+  color: rgba(232, 200, 120, 0.75);
+  text-align: center;
+}
+
+.msg-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+  margin-right: 14rpx;
+  border: 1rpx solid rgba(232, 200, 120, 0.35);
+  box-sizing: border-box;
+  display: block;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.msg-avatar.is-me {
+  margin-right: 0;
+  margin-left: 14rpx;
+  border-color: rgba(232, 200, 120, 0.45);
+}
+
+.msg-col {
+  display: flex;
+  flex-direction: column;
+  max-width: 70%;
+  min-width: 0;
+}
+
+.msg-col.is-user {
+  align-items: flex-end;
+}
+
+.msg-col.is-twin {
+  align-items: flex-start;
+}
+
+.msg-time {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.32);
+  margin-bottom: 8rpx;
+  line-height: 1.2;
+}
+
+.msg-bubble {
+  max-width: 100%;
+  padding: 16rpx 22rpx;
+  border-radius: 12rpx;
+  box-sizing: border-box;
+}
+
+.msg-bubble.is-twin {
+  background: rgba(40, 36, 52, 0.92);
+  border: 1rpx solid rgba(255, 255, 255, 0.06);
+  border-top-left-radius: 4rpx;
+}
+
+.msg-bubble.is-user {
+  background: rgba(232, 200, 120, 0.34);
+  border: 1rpx solid rgba(232, 200, 120, 0.5);
+  border-top-right-radius: 4rpx;
+}
+
+.msg-bubble-img {
+  width: 280rpx;
+  max-width: 100%;
+  border-radius: 10rpx;
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.msg-bubble-text {
+  font-size: 28rpx;
+  line-height: 1.55;
+  color: rgba(255, 248, 235, 0.94);
+  word-break: break-word;
+}
+
+.msg-bubble.is-user .msg-bubble-text {
+  color: rgba(255, 248, 220, 0.96);
+}
+
+.typing-dots {
   display: flex;
   align-items: center;
   gap: 10rpx;
-  padding: 22rpx 16rpx 22rpx 88rpx;
-  border-radius: 999rpx;
-  background: linear-gradient(
-    90deg,
-    #ffd6e7 0%,
-    #ffe8d6 15%,
-    #fff4c4 30%,
-    #d6f3e0 46%,
-    #cfeaff 62%,
-    #e0d6ff 80%,
-    #ffd6f0 100%
-  );
-  box-shadow:
-    0 10rpx 34rpx rgba(0, 0, 0, 0.32),
-    0 0 30rpx rgba(255, 214, 231, 0.5),
-    inset 0 -6rpx 14rpx rgba(255, 255, 255, 0.6),
-    inset 0 3rpx 10rpx rgba(255, 255, 255, 0.75);
-  z-index: 7;
-  transition: bottom 0.25s ease;
+  height: 36rpx;
+  padding: 0 4rpx;
 }
 
-/* 循环流光：一道彩虹高光缓缓扫过云面 */
-.cloud-shine {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  border-radius: 999rpx;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.cloud-shine::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -45%;
-  width: 45%;
-  background: linear-gradient(
-    100deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.65) 50%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  animation: cloudShine 3.6s ease-in-out infinite;
-}
-
-@keyframes cloudShine {
-  0% {
-    left: -45%;
-  }
-  55%,
-  100% {
-    left: 105%;
-  }
-}
-
-.cloud-glyph {
-  position: absolute;
-  left: 30rpx;
-  font-size: 36rpx;
-  line-height: 1;
-  pointer-events: none;
-}
-
-/* 图片 / 语音入口：白色半透明圆底，压住浅彩虹底保证图标可读 */
-.scene-tool {
-  width: 56rpx;
-  height: 56rpx;
+.typing-dot {
+  width: 10rpx;
+  height: 10rpx;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.62);
-  border: 2rpx solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.12);
+  background: rgba(255, 248, 235, 0.55);
+  animation: typingPulse 1.2s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingPulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-4rpx);
+  }
+}
+
+.stage-chat-tail {
+  height: 16rpx;
+}
+
+.stage-pending {
+  position: relative;
+  width: 100rpx;
+  height: 100rpx;
+  margin: 8rpx 28rpx 0;
+  border-radius: 14rpx;
+  overflow: hidden;
+  border: 2rpx solid rgba(232, 200, 120, 0.45);
   flex-shrink: 0;
 }
 
-.scene-tool.active {
-  background: rgba(90, 58, 33, 0.24);
-  border-color: rgba(90, 58, 33, 0.4);
-}
-
-/* 语音模式：输入位变成按住说话长条 */
-.scene-voice-hold {
-  flex: 1;
-  min-width: 0;
-  height: 64rpx;
-  border-radius: 999rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.62);
-  border: 2rpx solid rgba(255, 255, 255, 0.9);
-}
-
-.scene-voice-hold.recording {
-  background: rgba(90, 58, 33, 0.28);
-}
-
-.scene-voice-hold.recognizing {
-  opacity: 0.75;
-  pointer-events: none;
-}
-
-.scene-voice-text {
-  font-size: 25rpx;
-  font-weight: 500;
-  color: #5a3a21;
-}
-
-/* 待发送图片缩略图：悬在输入条上方 */
-.scene-pending {
-  position: absolute;
-  right: 16rpx;
-  bottom: calc(100% + 16rpx);
-  width: 120rpx;
-  height: 120rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-  border: 2rpx solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.35);
-}
-
-.scene-pending-thumb {
+.stage-pending-thumb {
   width: 100%;
   height: 100%;
 }
 
-.scene-pending-remove {
+.stage-pending-remove {
   position: absolute;
   top: 4rpx;
   right: 4rpx;
-  width: 36rpx;
-  height: 36rpx;
+  width: 32rpx;
+  height: 32rpx;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(22, 18, 33, 0.78);
+  background: rgba(22, 18, 33, 0.85);
 }
 
 .pending-x {
-  width: 16rpx;
-  height: 16rpx;
+  width: 14rpx;
+  height: 14rpx;
   position: relative;
 }
 
@@ -1216,10 +2477,10 @@ function enterFallback(reason) {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 16rpx;
-  height: 3rpx;
-  margin-left: -8rpx;
-  margin-top: -1.5rpx;
+  width: 14rpx;
+  height: 2rpx;
+  margin-left: -7rpx;
+  margin-top: -1rpx;
   border-radius: 2rpx;
   background: rgba(255, 255, 255, 0.92);
 }
@@ -1232,74 +2493,479 @@ function enterFallback(reason) {
   transform: rotate(-45deg);
 }
 
-.scene-input {
-  flex: 1;
-  height: 64rpx;
-  font-size: 27rpx;
-  font-weight: 500;
-  color: #5a3a21;
-}
-
-/* 发送钮：七色小云珠 */
-.scene-send {
-  width: 96rpx;
-  height: 68rpx;
-  border-radius: 999rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(90deg, #ffd6e7 0%, #fff4c4 32%, #cfeaff 66%, #e0d6ff 100%);
-  border: 2rpx solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 4rpx 16rpx rgba(255, 214, 231, 0.6);
+.feed-status {
+  padding: 4rpx 28rpx 0;
   flex-shrink: 0;
 }
 
-.scene-send.disabled {
-  opacity: 0.5;
+.feed-status-text {
+  font-size: 22rpx;
+  color: rgba(232, 200, 120, 0.72);
 }
 
-.scene-send-text {
-  font-size: 26rpx;
-  font-weight: 800;
-  letter-spacing: 1rpx;
-  color: #4a3608;
+.stage-composer {
+  flex-shrink: 0;
+  background: rgba(18, 14, 28, 0.98);
+  border-top: 1rpx solid rgba(255, 255, 255, 0.06);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-.scene-send.disabled .scene-send-text {
-  color: rgba(90, 80, 100, 0.6);
-}
-
-.float-btns {
-  position: absolute;
-  right: 32rpx;
-  bottom: calc(60rpx + env(safe-area-inset-bottom));
+.stage-input-bar {
   display: flex;
-  flex-direction: column;
-  gap: 22rpx;
-  z-index: 5;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 20rpx 18rpx;
+  box-sizing: border-box;
 }
 
-.fbtn {
-  width: 132rpx;
-  height: 132rpx;
+.scene-voice-hold {
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+}
+
+.scene-voice-hold.recording {
+  background: rgba(232, 200, 120, 0.2);
+  border-color: rgba(232, 200, 120, 0.45);
+}
+
+.scene-voice-hold.recognizing {
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.scene-voice-text {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: rgba(255, 248, 235, 0.88);
+}
+
+.scene-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 72rpx;
+  max-height: 200rpx;
+  padding: 18rpx 22rpx;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  line-height: 1.45;
+  color: rgba(255, 248, 235, 0.94);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+}
+
+.scene-input-ph {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+/* 微信式圆形加号：与输入框垂直居中；展开时旋转成 × */
+.scene-plus {
+  width: 56rpx;
+  height: 56rpx;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(22, 18, 33, 0.85);
-  border: 2rpx solid rgba(232, 200, 120, 0.5);
-  box-shadow: 0 8rpx 26rpx rgba(0, 0, 0, 0.4);
+  border: 3rpx solid rgba(232, 200, 120, 0.55);
+  background: transparent;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
-.fbtn--active {
-  transform: translateY(3rpx);
-  background: rgba(40, 32, 56, 0.9);
+.scene-plus.open {
+  transform: rotate(45deg);
+  border-color: rgba(232, 200, 120, 0.9);
 }
 
-.fbtn-text {
+.scene-plus--active {
+  background: rgba(232, 200, 120, 0.12);
+}
+
+.scene-plus-cross {
+  width: 28rpx;
+  height: 28rpx;
+  position: relative;
+}
+
+.plus-bar {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(232, 200, 120, 0.95);
+  border-radius: 2rpx;
+}
+
+.plus-bar.a {
+  width: 28rpx;
+  height: 3rpx;
+  margin-left: -14rpx;
+  margin-top: -1.5rpx;
+}
+
+.plus-bar.b {
+  width: 3rpx;
+  height: 28rpx;
+  margin-left: -1.5rpx;
+  margin-top: -14rpx;
+}
+
+/* 微信式附件面板：图标方块 + 文字 */
+.plus-panel {
+  padding: 8rpx 28rpx 28rpx;
+  box-sizing: border-box;
+  background: rgba(22, 18, 32, 0.98);
+  border-top: 1rpx solid rgba(255, 255, 255, 0.04);
+}
+
+.plus-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  padding-top: 12rpx;
+}
+
+.plus-cell {
+  width: 25%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16rpx 0 20rpx;
+  box-sizing: border-box;
+}
+
+.plus-cell--active .plus-ico-box {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.plus-ico-box {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1rpx solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14rpx;
+  box-sizing: border-box;
+}
+
+.plus-label {
+  font-size: 22rpx;
+  color: rgba(255, 248, 235, 0.62);
+  line-height: 1.2;
+}
+
+/* 投喂 icon */
+.ico-feed {
+  width: 52rpx;
+  height: 44rpx;
+  position: relative;
+}
+
+.ico-feed-bowl {
+  position: absolute;
+  left: 4rpx;
+  right: 4rpx;
+  bottom: 0;
+  height: 28rpx;
+  border-radius: 0 0 26rpx 26rpx;
+  background: linear-gradient(180deg, #e8c878 0%, #c9a227 100%);
+}
+
+.ico-feed-steam {
+  position: absolute;
+  top: 0;
+  width: 4rpx;
+  height: 16rpx;
+  border-radius: 4rpx;
+  background: rgba(232, 200, 120, 0.55);
+}
+
+.ico-feed-steam.s1 {
+  left: 18rpx;
+}
+
+.ico-feed-steam.s2 {
+  right: 18rpx;
+  top: 4rpx;
+  height: 12rpx;
+}
+
+/* 图片 icon */
+.ico-pic {
+  width: 48rpx;
+  height: 40rpx;
+  position: relative;
+}
+
+.ico-pic-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 6rpx;
+  border: 3rpx solid rgba(232, 200, 120, 0.85);
+  box-sizing: border-box;
+}
+
+.ico-pic-mtn {
+  position: absolute;
+  left: 6rpx;
+  bottom: 6rpx;
+  width: 0;
+  height: 0;
+  border-left: 14rpx solid transparent;
+  border-right: 14rpx solid transparent;
+  border-bottom: 16rpx solid rgba(232, 200, 120, 0.55);
+}
+
+.ico-pic-sun {
+  position: absolute;
+  right: 10rpx;
+  top: 8rpx;
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: rgba(232, 200, 120, 0.9);
+}
+
+/* 语音 icon */
+.ico-mic {
+  width: 28rpx;
+  height: 48rpx;
+  position: relative;
+}
+
+.ico-mic-head {
+  position: absolute;
+  left: 4rpx;
+  top: 0;
+  width: 20rpx;
+  height: 28rpx;
+  border-radius: 10rpx;
+  background: rgba(232, 200, 120, 0.92);
+}
+
+.ico-mic-stem {
+  position: absolute;
+  left: 12rpx;
+  top: 28rpx;
+  width: 4rpx;
+  height: 12rpx;
+  background: rgba(232, 200, 120, 0.75);
+}
+
+.ico-mic-base {
+  position: absolute;
+  left: 4rpx;
+  bottom: 0;
+  width: 20rpx;
+  height: 4rpx;
+  border-radius: 2rpx;
+  background: rgba(232, 200, 120, 0.75);
+}
+
+/* 键盘 icon */
+.ico-kb {
+  width: 48rpx;
+  height: 36rpx;
+  border-radius: 6rpx;
+  border: 3rpx solid rgba(232, 200, 120, 0.8);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  padding: 4rpx;
+}
+
+.ico-kb-row {
+  height: 4rpx;
+  border-radius: 2rpx;
+  background: rgba(232, 200, 120, 0.7);
+}
+
+.ico-kb-row.r1 {
+  width: 32rpx;
+}
+
+.ico-kb-row.r2 {
+  width: 28rpx;
+}
+
+.ico-kb-space {
+  width: 20rpx;
+  height: 4rpx;
+  border-radius: 2rpx;
+  background: rgba(232, 200, 120, 0.55);
+}
+
+/* 成长微条 */
+.hero-growth {
+  position: absolute;
+  left: 24rpx;
+  right: 24rpx;
+  bottom: 16rpx;
+  z-index: 3;
+}
+
+.growth-label {
+  display: block;
+  font-size: 22rpx;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+  color: rgba(240, 215, 140, 0.88);
+  margin-bottom: 8rpx;
+}
+
+.growth-bar {
+  height: 8rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.growth-fill {
+  height: 100%;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, #f0d78c 0%, #c9a227 100%);
+}
+
+/* 问候 */
+.greet-bubble {
+  position: absolute;
+  left: 28rpx;
+  right: 28rpx;
+  bottom: 72rpx;
+  z-index: 4;
+  padding: 18rpx 24rpx;
+  border-radius: 18rpx;
+  background: rgba(18, 14, 28, 0.88);
+  border: 1rpx solid rgba(232, 200, 120, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.greet-bubble-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.45;
+  color: rgba(255, 248, 235, 0.9);
+}
+
+.greet-bubble-cta {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: rgba(240, 215, 140, 0.85);
+}
+
+/* 投喂动画 */
+.food-fly {
+  position: absolute;
+  left: 50%;
+  bottom: 20%;
+  z-index: 5;
+  transform: translateX(-50%);
+  transition:
+    transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.9s ease;
+  opacity: 0.95;
+}
+
+.food-fly.go {
+  transform: translate(-50%, -180rpx) scale(0.4);
+  opacity: 0;
+}
+
+.fly-orb {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff6d0, #f0d78c 45%, #c9a227);
+  box-shadow: 0 0 24rpx rgba(240, 215, 140, 0.55);
+}
+
+.float-exp {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  z-index: 6;
+  transform: translateX(-50%);
+}
+
+.float-exp-text {
+  font-size: 40rpx;
+  font-weight: 800;
+  color: #f0d78c;
+  text-shadow: 0 0 20rpx rgba(240, 215, 140, 0.5);
+}
+
+.digest-tip {
+  position: absolute;
+  left: 50%;
+  bottom: 88rpx;
+  z-index: 5;
+  transform: translateX(-50%);
+  padding: 10rpx 22rpx;
+  border-radius: 999rpx;
+  background: rgba(18, 14, 28, 0.75);
+}
+
+.digest-text {
+  font-size: 22rpx;
+  color: rgba(255, 248, 235, 0.7);
+}
+
+.evolve-mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 6, 14, 0.55);
+}
+
+.evolve-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  padding: 40rpx 56rpx;
+  border-radius: 24rpx;
+  background: rgba(22, 18, 33, 0.95);
+  border: 2rpx solid rgba(232, 200, 120, 0.45);
+}
+
+.evolve-kicker {
+  font-size: 22rpx;
+  letter-spacing: 8rpx;
+  color: rgba(240, 215, 140, 0.7);
+}
+
+.evolve-title {
+  font-size: 44rpx;
+  font-weight: 800;
+  color: #f0d78c;
+}
+
+.evolve-sub {
   font-size: 26rpx;
-  font-weight: 700;
-  letter-spacing: 2rpx;
-  color: rgba(240, 215, 140, 0.95);
+  color: rgba(255, 248, 235, 0.7);
 }
 </style>

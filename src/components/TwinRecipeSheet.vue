@@ -77,7 +77,8 @@ watch(
       openId.value = ''
       reload()
     }
-  }
+  },
+  { immediate: true }
 )
 
 function close() {

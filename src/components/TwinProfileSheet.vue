@@ -98,7 +98,8 @@ watch(
     if (!open) return
     draft.value = ''
     loadProgress()
-  }
+  },
+  { immediate: true }
 )
 
 function close() {

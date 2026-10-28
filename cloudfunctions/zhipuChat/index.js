@@ -13,9 +13,12 @@ const https = require('https')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 
 const MODEL = 'glm-5.3'
+/** 附图与小黑 codeAssistChat 同款 flash，大人设+图在 glm-5.3 上易误杀 */
+const VISION_MODEL = 'glm-5.3-flash'
 /** CDN 传图下载限制（与 codeAssistChat 同款：8s 超时、3MB 上限） */
 const IMAGE_DOWNLOAD_TIMEOUT_MS = 8000
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024
+const VISION_HISTORY_MAX = 4
 /** Coding Plan 专用通道（与通用 /api/paas/v4 额度不共用） */
 const API_HOST = 'open.bigmodel.cn'
 const API_PATH = '/api/coding/paas/v4/chat/completions'
@@ -33,8 +36,10 @@ const SYSTEM_TWIN_BASE =
   '示例：问「我是谁」→「我是胡神，…」；问「今晚干嘛」→「我今晚出去打台球…」。' +
   '严格依据下方人设、当前状态与记忆；不知就说不确定，禁止编造与状态/记忆矛盾的行踪。' +
   '若记忆与旧说法冲突，以更新的记忆为准。' +
+  '状态标注过时、或未写行程时：行程类问题直接说不确定，禁止瞎编今晚安排。' +
   '遵守价值观与底线；不代替真人做法律/医疗决策。' +
   '说话语气必须模仿主人的风格与口头禅（见【语气风格·必须模仿】）；' +
+  '像微信私聊：多数回复 1～3 句，少用编号列表，禁止「作为 AI」套话。' +
   '宁可口语化像真人发消息，也不要通用客服腔。' +
   '涉及时效、日期以给定的北京时间为准。'
 
@@ -447,11 +452,11 @@ function fetchCdnImage(url, timeoutMs) {
   return fetchUrlBuffer(url, timeoutMs)
 }
 
-/** 图片解析：优先 CDN 通道下载；否则用旧 imageBase64 入参 */
+/** 图片解析：与 codeAssistChat 同款——仅接受 http(s) CDN URL */
 async function resolveImageFromEvent(event) {
   const mime = (event && event.imageMime) || 'image/jpeg'
   const cdn = event && event.imageCdn != null ? String(event.imageCdn).trim() : ''
-  if (cdn) {
+  if (cdn && (cdn.indexOf('http://') === 0 || cdn.indexOf('https://') === 0)) {
     try {
       const buf = await fetchCdnImage(cdn, IMAGE_DOWNLOAD_TIMEOUT_MS)
       return { base64: buf.toString('base64'), mime: mime }
@@ -505,6 +510,25 @@ exports.main = async (event) => {
     return { ok: false, message: '最后一条须为用户消息' }
   }
 
+  // 附图：走小黑同款 flash + 轻量 system，不塞人设/联网（那是误杀主因）
+  if (hasImage) {
+    const visionMsgs =
+      messages.length > VISION_HISTORY_MAX
+        ? messages.slice(messages.length - VISION_HISTORY_MAX)
+        : messages
+    try {
+      const reply = await runVisionChat(visionMsgs, imageBase64, imageMime, twinOpts.mode, apiKey)
+      return { ok: true, reply: reply }
+    } catch (err) {
+      const msg = (err && err.message) || '对话服务异常'
+      return {
+        ok: false,
+        message: friendlySafetyMessage(msg, true),
+        code: isSafetyHit(msg) ? 'CONTENT_FILTER' : '',
+      }
+    }
+  }
+
   const textForSearch = (last.content || '').trim()
   let searchDigest = ''
   // 分身模式默认不联网，避免口吻被新闻带跑；问时效时仍可检索
@@ -517,70 +541,94 @@ exports.main = async (event) => {
   }
 
   try {
-    const chatMsgs = buildMessagesForModel(messages, imageBase64, imageMime)
-    const data = await postChat(
-      {
-        model: MODEL,
-        messages: [{ role: 'system', content: buildSystemPrompt(searchDigest, twinOpts) }].concat(
-          chatMsgs
-        ),
-        thinking: { type: 'enabled' },
-        reasoning_effort: 'low',
-      },
-      apiKey
-    )
-    const choice = data && data.choices && data.choices[0]
-    const reply =
-      choice && choice.message && choice.message.content
-        ? String(choice.message.content).trim()
-        : ''
-    if (!reply) {
-      return { ok: false, message: '模型未返回内容' }
-    }
+    const reply = await runChatOnce(messages, '', '', searchDigest, twinOpts, apiKey)
     return { ok: true, reply: reply }
   } catch (err) {
-    const msg = (err && err.message) || '对话服务异常'
-    // 联网摘要偶发触发安全审核：去掉摘要再试一次
-    if (searchDigest && /敏感|不安全|安全|审核|content/i.test(msg)) {
+    let msg = (err && err.message) || '对话服务异常'
+    // 联网摘要偶发触发安全审核：去掉摘要再试
+    if (searchDigest && isSafetyHit(msg)) {
       try {
-        const chatMsgs = buildMessagesForModel(messages, imageBase64, imageMime)
-        const data = await postChat(
-          {
-            model: MODEL,
-            messages: [{ role: 'system', content: buildSystemPrompt('', twinOpts) }].concat(
-              chatMsgs
-            ),
-            thinking: { type: 'enabled' },
-            reasoning_effort: 'low',
-          },
-          apiKey
-        )
-        const choice = data && data.choices && data.choices[0]
-        const reply =
-          choice && choice.message && choice.message.content
-            ? String(choice.message.content).trim()
-            : ''
-        if (reply) return { ok: true, reply: reply }
+        const reply = await runChatOnce(messages, '', '', '', twinOpts, apiKey)
+        return { ok: true, reply: reply }
       } catch (err2) {
-        return {
-          ok: false,
-          message: friendlySafetyMessage((err2 && err2.message) || msg),
-          code: 'CONTENT_FILTER',
-        }
+        msg = (err2 && err2.message) || msg
       }
     }
     return {
       ok: false,
-      message: friendlySafetyMessage(msg),
-      code: /敏感|不安全|安全|审核|content/i.test(msg) ? 'CONTENT_FILTER' : '',
+      message: friendlySafetyMessage(msg, false),
+      code: isSafetyHit(msg) ? 'CONTENT_FILTER' : '',
     }
   }
 }
 
-function friendlySafetyMessage(msg) {
+function isSafetyHit(msg) {
+  // 勿用裸 content：会把无关英文报错误判成审核
+  return /敏感内容|不安全|安全审核|未通过.*审核|content.?filter|content.?policy/i.test(
+    String(msg || '')
+  )
+}
+
+function buildVisionSystem(mode) {
+  if (mode === 'twin') {
+    return (
+      '你是用户的数字分身，始终用第一人称「我」说话。' +
+      '结合用户发来的图片简洁自然地回答，像微信私聊，1～3 句即可。\n' +
+      beijingNowText() +
+      '。'
+    )
+  }
+  return SYSTEM_BASE + '\n' + beijingNowText() + '。'
+}
+
+/** 附图：glm-5.3-flash + 轻量 system（对齐 codeAssistChat） */
+async function runVisionChat(messages, imageBase64, imageMime, mode, apiKey) {
+  const chatMsgs = buildMessagesForModel(messages, imageBase64, imageMime)
+  const data = await postChat(
+    {
+      model: VISION_MODEL,
+      messages: [{ role: 'system', content: buildVisionSystem(mode) }].concat(chatMsgs),
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'low',
+    },
+    apiKey
+  )
+  const choice = data && data.choices && data.choices[0]
+  const reply =
+    choice && choice.message && choice.message.content
+      ? String(choice.message.content).trim()
+      : ''
+  if (!reply) throw new Error('模型未返回内容')
+  return reply
+}
+
+async function runChatOnce(messages, imageBase64, imageMime, searchDigest, twinOpts, apiKey) {
+  const chatMsgs = buildMessagesForModel(messages, imageBase64, imageMime)
+  const data = await postChat(
+    {
+      model: MODEL,
+      messages: [{ role: 'system', content: buildSystemPrompt(searchDigest, twinOpts) }].concat(
+        chatMsgs
+      ),
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'low',
+    },
+    apiKey
+  )
+  const choice = data && data.choices && data.choices[0]
+  const reply =
+    choice && choice.message && choice.message.content
+      ? String(choice.message.content).trim()
+      : ''
+  if (!reply) throw new Error('模型未返回内容')
+  return reply
+}
+
+function friendlySafetyMessage(msg, forImage) {
   const s = String(msg || '')
-  if (/敏感|不安全|安全|审核|content/i.test(s)) {
-    return '内容未通过安全审核，请换个说法，或切换到 MiniMax 再试'
+  if (isSafetyHit(s)) {
+    if (forImage) return '图片未通过安全审核，请换一张图再试'
+    return '内容未通过安全审核，请换个说法再试'
   }
   return s || '对话服务异常'
 }

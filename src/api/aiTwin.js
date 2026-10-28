@@ -68,8 +68,16 @@ export function emptyStatus() {
     sleepHabit: '',
     dietHabit: '',
     workHabit: '',
+    syncAt: 0,
   }
 }
+
+/** 状态超过此时长视为可能过时（12h） */
+const STATUS_STALE_MS = 12 * 60 * 60 * 1000
+/** 非 profile 记忆按相关度取条数 */
+const MEMORY_REST_TOP = 14
+/** digest 总条数上限（含 profile） */
+const MEMORY_DIGEST_MAX = 25
 
 export function emptyAvatar() {
   return {
@@ -130,19 +138,164 @@ export function formatPersonaText(persona) {
   return lines.join('\n')
 }
 
+/** 北京时间下的年月日数字，用于跨日判断 */
+function beijingYmd(ts) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(new Date(ts || Date.now()))
+  const map = {}
+  for (let i = 0; i < parts.length; i++) {
+    map[parts[i].type] = parts[i].value
+  }
+  return (map.year || '') + '-' + (map.month || '') + '-' + (map.day || '')
+}
+
+function formatSyncAge(syncAt) {
+  const t = Number(syncAt) || 0
+  if (!t) return '未知（久未同步）'
+  const ago = Date.now() - t
+  if (ago < 0) return '刚刚'
+  const min = Math.floor(ago / 60000)
+  if (min < 1) return '刚刚'
+  if (min < 60) return min + ' 分钟前'
+  const hour = Math.floor(min / 60)
+  if (hour < 48) return hour + ' 小时前'
+  return Math.floor(hour / 24) + ' 天前'
+}
+
+/** 今晚/今天类行程是否已跨自然日（相对 syncAt） */
+function isSameDayPlanStale(nextActions, syncAt) {
+  const text = (nextActions || '').trim()
+  if (!text || !/今晚|今天|今日/.test(text)) return false
+  const t = Number(syncAt) || 0
+  if (!t) return true
+  return beijingYmd(t) !== beijingYmd(Date.now())
+}
+
+/** 问候/提醒用：行程是否仍可信 */
+export function isStatusPlanFresh(status) {
+  const s = status || emptyStatus()
+  if (!(s.nextActions || '').trim()) return false
+  const syncAt = Number(s.syncAt) || 0
+  if (!syncAt || Date.now() - syncAt > STATUS_STALE_MS) return false
+  if (isSameDayPlanStale(s.nextActions, syncAt)) return false
+  return true
+}
+
 export function formatStatusText(status) {
   const s = status || emptyStatus()
+  const syncAt = Number(s.syncAt) || 0
+  const stale = !syncAt || Date.now() - syncAt > STATUS_STALE_MS
+  const planStale = isSameDayPlanStale(s.nextActions, syncAt)
   const lines = []
+  lines.push('状态同步：' + formatSyncAge(syncAt))
+  if (stale || planStale) {
+    lines.push(
+      '时效提示：以下行程/此刻状态可能过时；不确定时说不知道，禁止当成正在发生'
+    )
+  }
   if (s.nowDoing) lines.push('此刻在做：' + s.nowDoing)
   if (s.innerThought) lines.push('心理活动：' + s.innerThought)
-  if (s.nextActions) lines.push('接下来要做：' + s.nextActions)
+  if (s.nextActions && !planStale) {
+    lines.push('接下来要做：' + s.nextActions)
+  } else if (s.nextActions && planStale) {
+    lines.push('（过期行程，勿引用）' + s.nextActions)
+  }
   if (s.sleepHabit) lines.push('作息：' + s.sleepHabit)
   if (s.dietHabit) lines.push('饮食：' + s.dietHabit)
   if (s.workHabit) lines.push('工作：' + s.workHabit)
   return lines.join('\n')
 }
 
-export function formatMemoryDigest(list) {
+/** 从查询句切出 2 字以上片段，用于记忆打分 */
+function queryTokens(queryText) {
+  const raw = String(queryText || '')
+    .replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, ' ')
+    .trim()
+  if (!raw) return []
+  const parts = raw.split(/\s+/)
+  const tokens = []
+  const seen = {}
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i]
+    if (p.length >= 2 && !seen[p]) {
+      seen[p] = true
+      tokens.push(p)
+    }
+  }
+  // 中文连续串再切 2-gram，提高短句命中
+  const cn = raw.replace(/[A-Za-z0-9\s]/g, '')
+  for (let i = 0; i + 1 < cn.length; i++) {
+    const g = cn.slice(i, i + 2)
+    if (!seen[g]) {
+      seen[g] = true
+      tokens.push(g)
+    }
+  }
+  return tokens
+}
+
+function scoreMemory(mem, tokens) {
+  const text = (mem && mem.text) || ''
+  if (!text) return 0
+  let score = 0
+  for (let i = 0; i < tokens.length; i++) {
+    if (text.indexOf(tokens[i]) >= 0) score += tokens[i].length >= 3 ? 3 : 2
+  }
+  if (/纠正|记住|记一下|不是|而是/.test(text)) score += 2
+  if (mem.tag && mem.tag !== 'profile' && mem.tag !== 'feed') score += 1
+  return score
+}
+
+/**
+ * 按当前问题选记忆：profile 全保留 + 其余相关度 TopN
+ * query 为空时：profile + 按 createdAt 最新若干条
+ */
+export function selectMemoryDigest(memories, queryText) {
+  const arr = memories || []
+  const profile = []
+  const rest = []
+  for (let i = 0; i < arr.length; i++) {
+    const m = arr[i]
+    if (!m || !m.text) continue
+    if (m.tag === 'profile') profile.push(m)
+    else rest.push(m)
+  }
+
+  const tokens = queryTokens(queryText)
+  let pickedRest = []
+  if (!tokens.length) {
+    pickedRest = rest.slice(0, MEMORY_REST_TOP)
+  } else {
+    const scored = []
+    for (let i = 0; i < rest.length; i++) {
+      scored.push({ m: rest[i], score: scoreMemory(rest[i], tokens) })
+    }
+    scored.sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score
+      return (b.m.createdAt || 0) - (a.m.createdAt || 0)
+    })
+    const withHit = []
+    for (let i = 0; i < scored.length; i++) {
+      if (scored[i].score > 0) withHit.push(scored[i].m)
+      if (withHit.length >= MEMORY_REST_TOP) break
+    }
+    if (withHit.length) {
+      pickedRest = withHit
+    } else {
+      pickedRest = rest.slice(0, MEMORY_REST_TOP)
+    }
+  }
+
+  const room = Math.max(0, MEMORY_DIGEST_MAX - profile.length)
+  if (pickedRest.length > room) pickedRest = pickedRest.slice(0, room)
+  return formatMemoryDigest(profile.concat(pickedRest), MEMORY_DIGEST_MAX)
+}
+
+export function formatMemoryDigest(list, maxN) {
   const arr = list || []
   if (!arr.length) return ''
   // profile 资料记忆排前，避免被投喂摘要挤出注入窗口
@@ -155,8 +308,9 @@ export function formatMemoryDigest(list) {
     else rest.push(m)
   }
   const ordered = profile.concat(rest)
+  const cap = maxN != null ? maxN : 40
   const lines = []
-  const n = Math.min(ordered.length, 40)
+  const n = Math.min(ordered.length, cap)
   for (let i = 0; i < n; i++) {
     lines.push('- ' + ordered[i].text)
   }
@@ -250,6 +404,7 @@ export async function getStatus() {
     sleepHabit: row.sleepHabit || '',
     dietHabit: row.dietHabit || '',
     workHabit: row.workHabit || '',
+    syncAt: row.syncAt || row.updatedAt || 0,
     _id: row._id,
   })
 }
@@ -294,13 +449,53 @@ export async function addMemory(text, tag, qid) {
   }
 }
 
-/** 相同文案不重复写入；已存在则返回 null */
+function isCorrectionText(text) {
+  return /不是|而是|纠正|改成|其实|记一下|记住|别记错/.test(text || '')
+}
+
+/** 粗相关：共享足够多 2-gram 则视为同题旧记忆 */
+function memoriesLikelySameTopic(a, b) {
+  const ta = String(a || '')
+  const tb = String(b || '')
+  if (!ta || !tb) return false
+  if (ta === tb) return true
+  const grams = {}
+  let n = 0
+  for (let i = 0; i + 1 < ta.length; i++) {
+    const g = ta.slice(i, i + 2)
+    if (!grams[g]) {
+      grams[g] = true
+      n += 1
+    }
+  }
+  if (n < 4) return ta.length >= 6 && tb.indexOf(ta.slice(0, Math.min(6, ta.length))) >= 0
+  let hit = 0
+  for (let i = 0; i + 1 < tb.length; i++) {
+    if (grams[tb.slice(i, i + 2)]) hit += 1
+  }
+  return hit >= Math.min(6, Math.floor(n * 0.35))
+}
+
+/** 相同文案不重复写入；纠正类会删掉同题旧记忆后再写 */
 export async function addMemoryUnique(text, existingList) {
   const t = (text || '').trim().slice(0, 2000)
   if (!t) return null
   const list = existingList || []
   for (let i = 0; i < list.length; i++) {
     if ((list[i].text || '').trim() === t) return null
+  }
+  if (isCorrectionText(t)) {
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i]
+      if (!m || !m._id || m.tag === 'profile') continue
+      if (memoriesLikelySameTopic(t, m.text)) {
+        try {
+          await db.collection(COL).doc(m._id).remove()
+        } catch (err) {
+          console.warn('覆盖旧记忆失败', err)
+        }
+      }
+    }
   }
   return addMemory(t)
 }
@@ -330,7 +525,8 @@ export async function removeMemory(id) {
   await db.collection(COL).doc(id).remove()
 }
 
-const CHAT_MAX = 40
+/** 落库软顶：防微信单文档体积打满；正常远碰不到。调模型窗口另见 twinChat */
+const CHAT_SOFT_MAX = 2000
 
 export async function loadChat() {
   const row = await getSingleton('chat')
@@ -341,7 +537,9 @@ export async function loadChat() {
     if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue
     const content = m.content != null ? String(m.content) : ''
     if (!content) continue
-    out.push({ role: m.role, content: content })
+    const item = { role: m.role, content: content }
+    if (m.at) item.at = m.at
+    out.push(item)
   }
   return out
 }
@@ -349,15 +547,124 @@ export async function loadChat() {
 export async function saveChat(messages) {
   const list = messages || []
   const trimmed = []
-  const start = list.length > CHAT_MAX ? list.length - CHAT_MAX : 0
-  for (let i = start; i < list.length; i++) {
+  for (let i = 0; i < list.length; i++) {
     const m = list[i]
     if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue
     const content = m.content != null ? String(m.content).trim() : ''
     if (!content) continue
-    trimmed.push({ role: m.role, content: content.slice(0, 4000) })
+    const item = { role: m.role, content: content.slice(0, 4000) }
+    if (m.at) item.at = m.at
+    trimmed.push(item)
   }
-  return upsertSingleton('chat', { messages: trimmed })
+  // 仅软顶裁最旧，展示/落库默认保留完整历史
+  const start = trimmed.length > CHAT_SOFT_MAX ? trimmed.length - CHAT_SOFT_MAX : 0
+  const kept = start > 0 ? trimmed.slice(start) : trimmed
+  // 清空对话时重置自动投喂游标
+  if (!kept.length) {
+    return upsertSingleton('chat', {
+      messages: [],
+      feedCursorAt: 0,
+      feedCursorIndex: -1,
+    })
+  }
+  return upsertSingleton('chat', { messages: kept })
+}
+
+/** 自动投喂：用户条数 / 字数阈值 */
+const AUTO_FEED_USER_TURNS = 8
+const AUTO_FEED_MIN_CHARS = 120
+const CHAT_FEED_MAX_CHARS = 20000
+
+export function emptyChatFeedCursor() {
+  return { at: 0, index: -1 }
+}
+
+export async function getChatFeedCursor() {
+  const row = await getSingleton('chat')
+  if (!row) return emptyChatFeedCursor()
+  return {
+    at: Number(row.feedCursorAt) || 0,
+    index: row.feedCursorIndex != null ? Number(row.feedCursorIndex) : -1,
+  }
+}
+
+export async function setChatFeedCursor(cursor) {
+  const c = cursor || emptyChatFeedCursor()
+  return upsertSingleton('chat', {
+    feedCursorAt: Number(c.at) || 0,
+    feedCursorIndex: c.index != null ? Number(c.index) : -1,
+  })
+}
+
+function isSkipChatFeedContent(content) {
+  const t = (content || '').trim()
+  return !t || t === '（附图）'
+}
+
+/** 游标之后的消息（优先 at，否则 index） */
+function sliceMessagesAfterCursor(messages, cursor) {
+  const list = messages || []
+  const cur = cursor || emptyChatFeedCursor()
+  const out = []
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i]
+    if (!m) continue
+    const at = Number(m.at) || 0
+    if (cur.at > 0 && at > 0) {
+      if (at <= cur.at) continue
+    } else if (cur.index >= 0) {
+      if (i <= cur.index) continue
+    }
+    out.push({ msg: m, index: i })
+  }
+  return out
+}
+
+/** 把未投喂窗口拼成投喂文本 */
+export function buildChatFeedText(messages, cursor) {
+  const slice = sliceMessagesAfterCursor(messages, cursor)
+  const lines = []
+  let userCount = 0
+  let userChars = 0
+  let lastIndex = -1
+  let lastAt = 0
+  for (let i = 0; i < slice.length; i++) {
+    const m = slice[i].msg
+    const idx = slice[i].index
+    const content = (m.content || '').trim()
+    if (isSkipChatFeedContent(content)) continue
+    if (m.role === 'user') {
+      lines.push('【我】' + content)
+      userCount += 1
+      userChars += content.length
+    } else if (m.role === 'assistant') {
+      lines.push('【分身】' + content)
+    } else {
+      continue
+    }
+    lastIndex = idx
+    if (m.at) lastAt = Number(m.at) || lastAt
+  }
+  let text = lines.join('\n')
+  if (text.length > CHAT_FEED_MAX_CHARS) text = text.slice(0, CHAT_FEED_MAX_CHARS)
+  return {
+    text: text,
+    userCount: userCount,
+    userChars: userChars,
+    nextCursor: {
+      at: lastAt || (cursor && cursor.at) || 0,
+      index: lastIndex,
+    },
+  }
+}
+
+export function shouldAutoFeedChat(messages, cursor) {
+  const built = buildChatFeedText(messages, cursor)
+  return (
+    built.userCount >= AUTO_FEED_USER_TURNS &&
+    built.userChars >= AUTO_FEED_MIN_CHARS &&
+    !!built.text
+  )
 }
 
 /** 像事实/纠正（非纯短问句）时返回 true，用于自动写入长期记忆 */
@@ -377,7 +684,23 @@ export function looksLikeFactOrCorrection(text) {
 export function shouldUpdateNextActions(text) {
   const t = (text || '').trim()
   if (!t) return false
-  return /今晚|今天|周五|星期六|周日|安排|计划|要去|出去/.test(t)
+  if (/[？?]$/.test(t) && t.length < 16) return false
+  return /今晚|今天|今日|明天|周五|星期六|周日|安排|计划|要去|出去/.test(t)
+}
+
+/** 含「在忙/正在/我在…」等，适合写入 status.nowDoing */
+export function shouldUpdateNowDoing(text) {
+  const t = (text || '').trim()
+  if (!t || t.length < 3) return false
+  if (/[？?]$/.test(t)) return false
+  return /在忙|正在|我在|此刻|这会儿|这会|手头|忙着/.test(t)
+}
+
+/** 结束当前状态类说法 → 清空 nowDoing */
+export function shouldClearNowDoing(text) {
+  const t = (text || '').trim()
+  if (!t) return false
+  return /没事了|结束了|到家了|搞定了|忙完了|弄完了|下班了|睡了|休息了/.test(t)
 }
 
 /** 云函数消化：text 直接送，文件/图片先传云存储再传 fileID */

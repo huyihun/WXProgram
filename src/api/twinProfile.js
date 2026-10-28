@@ -82,5 +82,9 @@ export function buildStyleText(memories) {
     const m = list[i]
     if (m && m.tag === PROFILE_TAG && TONE_QIDS[m.qid] && m.text) lines.push(m.text)
   }
-  return lines.join('\n')
+  if (!lines.length) return ''
+  return (
+    '下面是主人原话与语气描述，请对齐句长、标点与口头禅，像微信私聊一样短：\n' +
+    lines.join('\n')
+  )
 }
