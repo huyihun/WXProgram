@@ -14,7 +14,7 @@
           <view class="grid">
             <view
               v-for="item in section.items"
-              :key="item.path"
+              :key="item.action || item.path"
               class="tool"
               hover-class="tool--active"
               @tap.stop="go(item)"
@@ -32,8 +32,7 @@
 
 <script setup>
 /**
- * 百宝箱：模型即入口的工具面板
- * 工具清单配置化——加减功能改 SECTIONS 即可；owner: true 的分区仅主人可见
+ * 百宝箱：生活/娱乐跳转 + 分身管理（emit action 由舞台承接）
  */
 import { loadOwnerFlag, isOwnerSync } from '@/utils/owner'
 
@@ -41,7 +40,7 @@ const props = defineProps({
   show: Boolean,
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'action'])
 
 const SECTIONS = [
   {
@@ -70,7 +69,14 @@ const SECTIONS = [
     title: '分身管理 · 仅主人',
     owner: true,
     items: [
-      { name: '分身控制台', emoji: '🧬', path: '/pages/twin/index' },
+      { name: '投喂', emoji: '🍽️', action: 'feed' },
+      { name: '食谱', emoji: '📖', action: 'recipe' },
+      { name: '人设', emoji: '🎭', action: 'persona' },
+      { name: '状态', emoji: '📡', action: 'status' },
+      { name: '记忆', emoji: '🧠', action: 'memory' },
+      { name: '资料', emoji: '📋', action: 'profile' },
+      { name: '形象', emoji: '🖼️', action: 'avatar' },
+      { name: '清空对话', emoji: '🧹', action: 'clearChat' },
       { name: '经典首页', emoji: '🏠', path: '/pages/index/index' },
     ],
   },
@@ -101,6 +107,10 @@ function close() {
 
 function go(item) {
   emit('close')
+  if (item.action) {
+    emit('action', item.action)
+    return
+  }
   uni.navigateTo({
     url: item.path,
     fail: function () {
@@ -134,7 +144,6 @@ function go(item) {
   left: 0;
   right: 0;
   bottom: 0;
-  /* 显式高度保证 flex 子项拿到确定高度，内容必然可见可滚 */
   height: 78vh;
   display: flex;
   flex-direction: column;

@@ -7,6 +7,8 @@
  * 使用前请在云开发控制台创建集合：
  * - ai_prefs（字段 defaultProvider: zhipu | minimax）
  */
+import { wrapImageCdn } from '@/code-assist/api'
+
 const COL = 'ai_prefs'
 const LOCAL_KEY = 'ai_default_provider_v1'
 const DEFAULT_PROVIDER = 'zhipu'
@@ -41,12 +43,6 @@ function writeLocalProvider(id) {
 
 function getDb() {
   return wx.cloud.database()
-}
-
-/** wx.cloud.CDN 工厂（仅微信端可用；不可用返回 null） */
-function cloudCdn() {
-  if (typeof wx !== 'undefined' && wx.cloud && wx.cloud.CDN) return wx.cloud.CDN
-  return null
 }
 
 /** 读默认大模型：本地缓存优先，再拉云；无记录则智谱 */
@@ -104,22 +100,19 @@ export async function chatWithAi(messages, provider, imageOpts) {
     throw new Error('当前模型暂不支持图片，请切换到智谱')
   }
 
-  let imageBase64 = opts.imageBase64 || ''
+  const imageBase64 = opts.imageBase64 || ''
   const imageMime = opts.mime || 'image/jpeg'
   const name = id === 'minimax' ? 'minimaxChat' : 'zhipuChat'
   const data = { messages: messages || [] }
   if (hasImage) {
     data.imageMime = imageMime
-    const cdnFactory = cloudCdn()
-    if (opts.localPath && cdnFactory) {
-      // 小黑同款 CDN 通道：图片不进 callFunction data，无体积限制，
-      // 云函数侧收到临时 URL 自行下载转 base64
-      data.imageCdn = cdnFactory({ type: 'filePath', filePath: opts.localPath })
-    } else {
-      // 回退 base64：callFunction data 有上限，压缩后仍超限提前报可懂的错
-      if (!imageBase64 && opts.localPath) {
-        imageBase64 = await readFileBase64(opts.localPath)
+    // 原样复用小黑 wrapImageCdn；禁止本地图转 base64 塞 callFunction
+    if (opts.localPath) {
+      data.imageCdn = wrapImageCdn(opts.localPath)
+      if (!data.imageCdn) {
+        throw new Error('当前环境不支持云 CDN 传图')
       }
+    } else if (imageBase64) {
       if (imageBase64.length > 900000) {
         throw new Error('图片过大，请换一张小图或截图后再试')
       }
@@ -164,9 +157,12 @@ export async function chatWithAi(messages, provider, imageOpts) {
 export function formatAiChatError(err) {
   const msg = (err && (err.message || err.errMsg)) || ''
   const code = (err && err.code) || ''
-  if (code === 'CONTENT_FILTER' || /敏感|不安全|安全|审核|content/i.test(msg)) {
+  if (
+    code === 'CONTENT_FILTER' ||
+    /敏感内容|不安全|安全审核|未通过.*审核|content.?filter|content.?policy/i.test(msg)
+  ) {
     return {
-      tip: '内容未通过安全审核，请换个说法，或切换到 MiniMax 再试',
+      tip: '内容未通过安全审核，请换张图或改一下说法再试',
       toast: '未通过安全审核',
     }
   }
@@ -184,25 +180,6 @@ export function formatAiChatError(err) {
   const tip = msg.length > 60 ? msg.slice(0, 60) + '…' : msg
   const toast = tip.length > 14 ? tip.slice(0, 14) + '…' : tip
   return { tip: tip, toast: toast }
-}
-
-function readFileBase64(filePath) {
-  return new Promise(function (resolve, reject) {
-    if (!filePath) {
-      resolve('')
-      return
-    }
-    uni.getFileSystemManager().readFile({
-      filePath: filePath,
-      encoding: 'base64',
-      success: function (res) {
-        resolve((res && res.data) || '')
-      },
-      fail: function (err) {
-        reject(new Error((err && err.errMsg) || '读取图片失败'))
-      },
-    })
-  })
 }
 
 /** @deprecated 使用 chatWithAi */

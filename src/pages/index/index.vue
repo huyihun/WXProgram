@@ -82,8 +82,7 @@
                     <view class="icon-hushen-mark" />
                   </view>
                   <view v-else-if="item.id === 'twin'" class="icon-twin">
-                    <view class="icon-twin-face" />
-                    <view class="icon-twin-dot" />
+                    <image class="icon-twin-img" src="/static/twin/avatar.png" mode="aspectFill" />
                   </view>
                   <view v-else-if="item.id === 'album'" class="icon-album">
                     <view class="fa-back" />
@@ -355,7 +354,7 @@ const twinEntry = {
   id: 'twin',
   name: '分身',
   desc: '胡神 AI 分身',
-  path: '/pages/twin/index',
+  path: '/packageTwin/pages/stage/index',
 }
 
 const albumEntry = {
@@ -1699,33 +1698,20 @@ function handleEntryTap(item) {
   background: rgba(255, 255, 255, 0.95);
 }
 
-/* 分身：人脸轮廓 */
+/* 分身：圆形头像 */
 .icon-twin {
-  position: relative;
   width: 44rpx;
   height: 44rpx;
-}
-
-.icon-twin-face {
-  position: absolute;
-  left: 8rpx;
-  top: 6rpx;
-  width: 28rpx;
-  height: 32rpx;
-  border-radius: 50% 50% 46% 46%;
-  border: 3rpx solid rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2rpx solid rgba(240, 215, 140, 0.9);
   box-sizing: border-box;
 }
 
-.icon-twin-dot {
-  position: absolute;
-  left: 18rpx;
-  top: 16rpx;
-  width: 8rpx;
-  height: 8rpx;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 10rpx 0 0 rgba(255, 255, 255, 0.95);
+.icon-twin-img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 /* 相册：双层相框 */

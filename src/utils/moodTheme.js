@@ -1,10 +1,9 @@
 /**
  * 心情对应的全局主题色
  * 通过 CSS 变量挂到 PageRoot / page，覆盖 uni.scss 中的色值
+ * 全站背景改为纯 CSS 氛围渐变（不再加载实景主题壁纸）
  */
 import { ref } from 'vue'
-import { WALLPAPER_FILE_IDS } from '@/utils/wallpaperCatalog'
-import { getPlayUrl } from '@/utils/playlist'
 
 const STORAGE_KEY = 'moodThemeKey'
 
@@ -72,7 +71,7 @@ function elevate(base, rgb, cardSoft) {
   })
 }
 
-/** 各心情色板（咖啡默认 / 开心暖黄 / 平静蓝 / …） */
+/** 各心情色板 + 氛围渐变（咖啡默认 / 开心暖黄 / 平静蓝 / …） */
 export const MOOD_THEMES = {
   coffee: elevate(
     {
@@ -82,7 +81,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#6B4423',
       '--color-title': '#3E2723',
       '--color-subtitle': '#8D6E63',
-      '--gradient-hero': 'linear-gradient(180deg, #E8D5C4 0%, #F6F0EA 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #E6D4C2 0%, #F3EBE3 42%, #F8F3ED 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #E2CDB8 0%, #EDE0D2 28%, #F3EBE3 55%, #F7F2EC 78%, #FAF7F3 100%)',
     },
     [139, 94, 60],
     '#FAF6F2'
@@ -95,7 +96,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#D4841E',
       '--color-title': '#4A320F',
       '--color-subtitle': '#A88456',
-      '--gradient-hero': 'linear-gradient(180deg, #FFE8C4 0%, #FFF8ED 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #FFE0B0 0%, #FFF6E8 50%, #FFFCF7 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #FFD9A0 0%, #FFEAC4 30%, #FFF6E8 58%, #FFFBF5 100%)',
     },
     [240, 160, 58],
     '#FFFCF7'
@@ -108,7 +111,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#2B7FD4',
       '--color-title': '#0F2D4A',
       '--color-subtitle': '#6B8FA8',
-      '--gradient-hero': 'linear-gradient(180deg, #D6EBFA 0%, #EEF6FC 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #CDE6F7 0%, #E8F4FC 50%, #F5FAFD 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #C2E0F5 0%, #D9ECF9 32%, #E8F4FC 60%, #F4FAFD 100%)',
     },
     [74, 159, 232],
     '#F7FBFE'
@@ -121,7 +126,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#4A6F8A',
       '--color-title': '#243447',
       '--color-subtitle': '#7A8FA0',
-      '--gradient-hero': 'linear-gradient(180deg, #D5E0EA 0%, #EEF2F6 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #D0DCE6 0%, #E8EEF4 52%, #F3F6F9 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #C8D6E2 0%, #D8E2EA 34%, #E8EEF4 62%, #F2F5F8 100%)',
     },
     [107, 143, 168],
     '#F6F8FA'
@@ -134,7 +141,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#B8843C',
       '--color-title': '#3D2F1A',
       '--color-subtitle': '#9A8568',
-      '--gradient-hero': 'linear-gradient(180deg, #EBD9BC 0%, #F8F2E9 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #E8D4B4 0%, #F7F0E6 52%, #FBF7F1 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #E2CBA8 0%, #EEDCC0 32%, #F7F0E6 60%, #FBF7F2 100%)',
     },
     [212, 160, 90],
     '#FCFAF6'
@@ -147,7 +156,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#5A7E68',
       '--color-title': '#2A3A30',
       '--color-subtitle': '#7A9084',
-      '--gradient-hero': 'linear-gradient(180deg, #D4E0D8 0%, #F0F4F1 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #D2DED6 0%, #EBF0EC 52%, #F4F7F5 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #C9D8CE 0%, #DCE6E0 34%, #EBF0EC 62%, #F4F7F5 100%)',
     },
     [122, 158, 136],
     '#F7FAF8'
@@ -160,7 +171,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#C84E3E',
       '--color-title': '#4A1F18',
       '--color-subtitle': '#A87870',
-      '--gradient-hero': 'linear-gradient(180deg, #FFD6D0 0%, #FFF4F2 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #FFCFC6 0%, #FFF0EE 52%, #FFF8F7 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #FFC4B8 0%, #FFDCD5 32%, #FFF0EE 60%, #FFF8F7 100%)',
     },
     [232, 107, 90],
     '#FFF9F8'
@@ -173,7 +186,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#C98A2C',
       '--color-title': '#4A3410',
       '--color-subtitle': '#A88855',
-      '--gradient-hero': 'linear-gradient(180deg, #FFE6BF 0%, #FFF9EF 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #FFE2B5 0%, #FFF8E9 52%, #FFFCF6 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #FFD9A0 0%, #FFEAC4 32%, #FFF8E9 60%, #FFFCF6 100%)',
     },
     [232, 168, 74],
     '#FFFCF6'
@@ -186,7 +201,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#3E8AAB',
       '--color-title': '#163948',
       '--color-subtitle': '#6E94A6',
-      '--gradient-hero': 'linear-gradient(180deg, #CFE6F0 0%, #F0F7FA 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #C8E2EE 0%, #EAF4F8 52%, #F5FAFC 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #BDDCEC 0%, #D4EAF3 34%, #EAF4F8 62%, #F5FAFC 100%)',
     },
     [91, 168, 200],
     '#F6FBFC'
@@ -199,7 +216,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#5A708C',
       '--color-title': '#273344',
       '--color-subtitle': '#7F90A3',
-      '--gradient-hero': 'linear-gradient(180deg, #D2DBE6 0%, #F0F3F7 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #CFD8E4 0%, #E9EDF3 52%, #F3F5F8 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #C5D0DE 0%, #D7DFE9 34%, #E9EDF3 62%, #F3F5F8 100%)',
     },
     [122, 141, 166],
     '#F6F8FA'
@@ -212,7 +231,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#787862',
       '--color-title': '#333328',
       '--color-subtitle': '#8C8C78',
-      '--gradient-hero': 'linear-gradient(180deg, #DDDDD2 0%, #F5F5F1 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #DDDDD0 0%, #F0F0EC 52%, #F7F7F4 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #D5D5C6 0%, #E5E5DB 34%, #F0F0EC 62%, #F7F7F4 100%)',
     },
     [154, 154, 130],
     '#FAFAF8'
@@ -225,7 +246,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#B83C2E',
       '--color-title': '#4A1A14',
       '--color-subtitle': '#A87068',
-      '--gradient-hero': 'linear-gradient(180deg, #FFCFC7 0%, #FFF3F1 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #FFC9BF 0%, #FFF0ED 52%, #FFF8F6 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #FFBDB0 0%, #FFD8D0 32%, #FFF0ED 60%, #FFF8F6 100%)',
     },
     [224, 85, 69],
     '#FFF8F7'
@@ -238,7 +261,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#2A7F76',
       '--color-title': '#163833',
       '--color-subtitle': '#6A908A',
-      '--gradient-hero': 'linear-gradient(180deg, #C8E4E0 0%, #EFF7F6 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #C5E2DD 0%, #E8F2F1 52%, #F3F9F8 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #B8DBD5 0%, #D0E8E4 34%, #E8F2F1 62%, #F3F9F8 100%)',
     },
     [63, 158, 148],
     '#F5FBFA'
@@ -251,7 +276,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#D16A2C',
       '--color-title': '#4A2A12',
       '--color-subtitle': '#A87E58',
-      '--gradient-hero': 'linear-gradient(180deg, #FFD9B5 0%, #FFF7EE 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #FFD4A8 0%, #FFF5EB 52%, #FFFBF6 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #FFC890 0%, #FFE2C0 32%, #FFF5EB 60%, #FFFBF6 100%)',
     },
     [240, 138, 74],
     '#FFF9F4'
@@ -264,7 +291,9 @@ export const MOOD_THEMES = {
       '--color-primary-dark': '#538C56',
       '--color-title': '#243D26',
       '--color-subtitle': '#75967A',
-      '--gradient-hero': 'linear-gradient(180deg, #D4E8D4 0%, #F3F8F2 100%)',
+      '--gradient-hero': 'linear-gradient(165deg, #D0E6D0 0%, #EEF5EC 52%, #F6FAF5 100%)',
+      '--gradient-atmosphere':
+        'linear-gradient(165deg, #C4DFC4 0%, #D9EBD9 34%, #EEF5EC 62%, #F6FAF5 100%)',
     },
     [111, 174, 114],
     '#F7FBF6'
@@ -277,10 +306,16 @@ export const themeStyle = ref(getMoodThemeStyle('coffee'))
 /** 当前心情 key */
 export const currentMoodKey = ref('coffee')
 
-/** 当前主题壁纸临时 URL，供 PageRoot 全站背景 */
+/**
+ * 主题实景壁纸 URL（已停用：恒为空，改用 CSS 氛围渐变）
+ * 壁纸页珍藏图库仍走 wallpaperCatalog，与此无关
+ */
 export const themeBgUrl = ref('')
 
-/** 心情 → 壁纸文件名（对照 src/主题背景图片.txt） */
+/**
+ * 历史：心情 → 壁纸文件名（仅备用对照，主题背景不再加载）
+ * 对照 src/主题背景图片.txt
+ */
 export const MOOD_BG_FILES = {
   coffee: 'w055.jpg',
   happy: 'w017.jpg',
@@ -299,17 +334,11 @@ export const MOOD_BG_FILES = {
   relaxed: 'w078.jpg',
 }
 
-const bgUrlMem = {}
-const bgInflight = {}
-let bgSeq = 0
-
-export function getMoodBgFileID(key) {
-  const safe = MOOD_THEMES[key] ? key : 'coffee'
-  const file = MOOD_BG_FILES[safe] || MOOD_BG_FILES.coffee
-  return WALLPAPER_FILE_IDS[file] || ''
+export function getMoodBgFileID() {
+  return ''
 }
 
-/** #RRGGBB → rgba，用于壁纸上的可读蒙层 */
+/** #RRGGBB → rgba，用于氛围底上的轻蒙层 */
 function hexToVeil(hex, alpha) {
   const h = String(hex || '').replace('#', '')
   if (h.length !== 6) {
@@ -321,90 +350,14 @@ function hexToVeil(hex, alpha) {
   return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')'
 }
 
-function delay(ms) {
-  return new Promise(function (resolve) {
-    setTimeout(resolve, ms)
-  })
+/** 清掉过期缓存（兼容旧调用，现无壁纸链） */
+export function invalidateThemeBgCache() {
+  themeBgUrl.value = ''
 }
 
-async function fetchThemeBgUrl(fid) {
-  if (bgUrlMem[fid]) return bgUrlMem[fid]
-  if (bgInflight[fid]) return bgInflight[fid]
-
-  bgInflight[fid] = (async function () {
-    try {
-      let url = ''
-      try {
-        url = await getPlayUrl(fid)
-      } catch (err) {
-        console.warn('主题壁纸换链失败，将重试', err)
-      }
-      if (!url) {
-        await delay(400)
-        url = await getPlayUrl(fid)
-      }
-      if (url) bgUrlMem[fid] = url
-      return url || ''
-    } finally {
-      delete bgInflight[fid]
-    }
-  })()
-
-  return bgInflight[fid]
-}
-
-async function resolveThemeBg(key) {
-  const safe = MOOD_THEMES[key] ? key : 'coffee'
-  const fid = getMoodBgFileID(safe)
-  if (!fid) {
-    themeBgUrl.value = ''
-    return
-  }
-  if (bgUrlMem[fid]) {
-    themeBgUrl.value = bgUrlMem[fid]
-    return
-  }
-  const seq = ++bgSeq
-  try {
-    const url = await fetchThemeBgUrl(fid)
-    if (seq !== bgSeq) return
-    themeBgUrl.value = url || ''
-  } catch (err) {
-    console.warn('主题壁纸加载失败', err)
-    if (seq === bgSeq) themeBgUrl.value = ''
-  }
-}
-
-/** 清掉过期/坏掉的临时链缓存（按 fileID 或 url） */
-export function invalidateThemeBgCache(urlOrFid) {
-  const key = urlOrFid || ''
-  if (!key) return
-  if (bgUrlMem[key]) {
-    delete bgUrlMem[key]
-    return
-  }
-  const fids = Object.keys(bgUrlMem)
-  for (let i = 0; i < fids.length; i++) {
-    if (bgUrlMem[fids[i]] === key) delete bgUrlMem[fids[i]]
-  }
-}
-
-/**
- * 保证当前主题有壁纸：空则补拉；force 时清缓存重拉
- */
-export function ensureMoodThemeBg(force) {
-  const key = currentMoodKey.value || 'coffee'
-  const fid = getMoodBgFileID(key)
-  if (!fid) return
-  if (force) {
-    invalidateThemeBgCache(fid)
-    if (themeBgUrl.value) invalidateThemeBgCache(themeBgUrl.value)
-    themeBgUrl.value = ''
-    resolveThemeBg(key)
-    return
-  }
-  if (themeBgUrl.value) return
-  resolveThemeBg(key)
+/** 主题背景已改为 CSS，无需换链；保留 API 避免调用方报错 */
+export function ensureMoodThemeBg() {
+  themeBgUrl.value = ''
 }
 
 export function getMoodThemeStyle(key) {
@@ -418,11 +371,13 @@ export function getMoodThemeStyle(key) {
     '--color-title': theme['--color-title'],
     '--color-subtitle': theme['--color-subtitle'],
     '--gradient-hero': theme['--gradient-hero'],
+    '--gradient-atmosphere': theme['--gradient-atmosphere'] || theme['--gradient-hero'],
     '--color-card-soft': theme['--color-card-soft'],
     '--shadow-card-elevated': theme['--shadow-card-elevated'],
     '--shadow-card-pressed': theme['--shadow-card-pressed'],
     '--shadow-icon': theme['--shadow-icon'],
-    '--color-veil': hexToVeil(theme['--color-bg'], 0.52),
+    // 氛围渐变已够干净，蒙层极淡
+    '--color-veil': hexToVeil(theme['--color-bg'], 0.12),
   }
   if (safe === 'coffee') {
     style['--lyric-bg'] = '#1a1410'
@@ -446,25 +401,25 @@ export function getMoodThemeStyle(key) {
   return style
 }
 
-function applyMoodThemeCore(key, loadBg) {
+function applyMoodThemeCore(key) {
   const safeKey = MOOD_THEMES[key] ? key : 'coffee'
   currentMoodKey.value = safeKey
   themeStyle.value = getMoodThemeStyle(safeKey)
+  themeBgUrl.value = ''
   try {
     uni.setStorageSync(STORAGE_KEY, safeKey)
   } catch (err) {
     console.error('保存主题缓存失败', err)
   }
-  if (loadBg) resolveThemeBg(safeKey)
   return safeKey
 }
 
-/** 应用心情主题：更新内存 + 本地缓存 + 壁纸 */
+/** 应用心情主题：更新内存 + 本地缓存（氛围渐变，不拉实景壁纸） */
 export function applyMoodTheme(key) {
-  return applyMoodThemeCore(key, true)
+  return applyMoodThemeCore(key)
 }
 
-/** 从本地缓存恢复色板（不拉壁纸，需等云 init 后再 applyMoodTheme） */
+/** 从本地缓存恢复色板 */
 export function restoreMoodTheme() {
   let key = 'coffee'
   try {
@@ -472,5 +427,5 @@ export function restoreMoodTheme() {
   } catch (err) {
     console.error('读取主题缓存失败', err)
   }
-  return applyMoodThemeCore(key, false)
+  return applyMoodThemeCore(key)
 }

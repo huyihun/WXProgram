@@ -67,7 +67,8 @@ watch(
   () => props.show,
   (open) => {
     if (open) loadPersona()
-  }
+  },
+  { immediate: true }
 )
 
 function close() {

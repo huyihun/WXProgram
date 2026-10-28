@@ -286,12 +286,8 @@ watch(
   () => props.show,
   function (open) {
     if (open) {
-      if (props.twin) {
-        selectedProvider.value = 'zhipu'
-        loadTwinHistory()
-      } else {
-        loadDefaultProvider()
-      }
+      loadDefaultProvider()
+      if (props.twin) loadTwinHistory()
       bindKeyboard()
       nextTick(function () {
         scrollToEnd()
@@ -563,8 +559,9 @@ async function handleSend() {
     let provider = selectedProvider.value
     let opts = imageOpts
     if (props.twin) {
-      provider = 'zhipu'
-      const twinCtx = await buildTwinContext()
+      // 分身跟随默认模型；附图时 MiniMax 不支持识图，回退智谱
+      if (imageOpts && provider === 'minimax') provider = 'zhipu'
+      const twinCtx = await buildTwinContext(text)
       opts = Object.assign({}, imageOpts, twinCtx)
     }
     const reply = await chatWithAi(messagesForApi(), provider, opts)

@@ -2,7 +2,7 @@
  * MiniMax 对话（密钥仅存云函数环境变量 MINIMAX_API_KEY）
  *
  * 国内站：api.minimaxi.com（不要用 minimax.io）
- * 入参：{ messages: [{ role, content }] }
+ * 入参：{ messages: [{ role, content }], mode?, personaText?, statusText?, memoryDigest?, styleText?, avatarDesc? }
  * 出参：{ ok, reply } 或 { ok:false, message }
  * 模型固定 MiniMax-M2.7
  */
@@ -19,6 +19,20 @@ const SYSTEM_BASE =
   '你是生活百科与闲聊助手。用简洁自然的中文回答，像懂生活的朋友。' +
   '常识、百科、日常问题尽量讲清楚；不确定时坦诚说明。不要编造具体数据或出处。' +
   '涉及时效、日期时以给定的北京时间为准；不要编造新闻。'
+
+const SYSTEM_TWIN_BASE =
+  '你就是「胡神」本人（数字分身）。对方在和「我」对话，你必须始终用第一人称「我」说话。' +
+  '禁止用「你是…」「他是…」指称自己；问「我是谁/你是谁」时只答「我是…」。' +
+  '叙述行程、计划一律用「我今晚…」「我每周五…」，禁止「你下班后…」「你去…」。' +
+  '示例：问「我是谁」→「我是胡神，…」；问「今晚干嘛」→「我今晚出去打台球…」。' +
+  '严格依据下方人设、当前状态与记忆；不知就说不确定，禁止编造与状态/记忆矛盾的行踪。' +
+  '若记忆与旧说法冲突，以更新的记忆为准。' +
+  '状态标注过时、或未写行程时：行程类问题直接说不确定，禁止瞎编今晚安排。' +
+  '遵守价值观与底线；不代替真人做法律/医疗决策。' +
+  '说话语气必须模仿主人的风格与口头禅（见【语气风格·必须模仿】）；' +
+  '像微信私聊：多数回复 1～3 句，少用编号列表，禁止「作为 AI」套话。' +
+  '宁可口语化像真人发消息，也不要通用客服腔。' +
+  '涉及时效、日期以给定的北京时间为准。'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -56,8 +70,24 @@ function beijingNowText() {
   )
 }
 
-function buildSystemPrompt() {
-  return SYSTEM_BASE + '\n' + beijingNowText() + '。'
+function buildSystemPrompt(twinOpts) {
+  const twin = twinOpts || {}
+  const isTwin = twin.mode === 'twin'
+  let s = (isTwin ? SYSTEM_TWIN_BASE : SYSTEM_BASE) + '\n' + beijingNowText() + '。'
+  if (isTwin) {
+    if (twin.avatarDesc) s += '\n【形象】\n' + twin.avatarDesc + '\n'
+    if (twin.personaText) s += '\n【人设】\n' + twin.personaText + '\n'
+    if (twin.statusText) s += '\n【当前状态·须与之一致】\n' + twin.statusText + '\n'
+    if (twin.memoryDigest) s += '\n【长期记忆】\n' + twin.memoryDigest + '\n'
+    if (twin.styleText) {
+      s +=
+        '\n【语气风格·必须模仿】\n以下是主人的语气描述与原话样本，' +
+        '你的用词、句长、标点、口头禅都必须向主人靠拢，让主人一眼觉得"这就像我说的"：\n' +
+        twin.styleText +
+        '\n'
+    }
+  }
+  return s
 }
 
 function postJson(body, apiKey) {
@@ -142,11 +172,20 @@ exports.main = async (event) => {
     return { ok: false, message: '最后一条须为用户消息' }
   }
 
+  const twinOpts = {
+    mode: event && event.mode,
+    personaText: event && event.personaText,
+    statusText: event && event.statusText,
+    memoryDigest: event && event.memoryDigest,
+    styleText: event && event.styleText,
+    avatarDesc: event && event.avatarDesc,
+  }
+
   try {
     const data = await postJson(
       {
         model: MODEL,
-        messages: [{ role: 'system', content: buildSystemPrompt() }].concat(messages),
+        messages: [{ role: 'system', content: buildSystemPrompt(twinOpts) }].concat(messages),
       },
       apiKey
     )

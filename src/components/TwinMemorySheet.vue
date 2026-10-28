@@ -61,7 +61,8 @@ watch(
   () => props.show,
   (open) => {
     if (open) reload()
-  }
+  },
+  { immediate: true }
 )
 
 function close() {

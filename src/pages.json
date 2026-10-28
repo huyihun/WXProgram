@@ -160,7 +160,8 @@
         {
           "path": "pages/stage/index",
           "style": {
-            "disableScroll": true
+            "disableScroll": true,
+            "softinputMode": "adjustNothing"
           }
         }
       ]

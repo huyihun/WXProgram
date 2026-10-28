@@ -8,6 +8,23 @@
         <text class="panel-close" @tap="close">收起</text>
       </view>
 
+      <view class="quick-bar">
+        <view class="quick-item" hover-class="quick-item--active" @tap.stop="quickText">
+          <text class="quick-item-text">贴文本</text>
+        </view>
+        <view class="quick-item" hover-class="quick-item--active" @tap.stop="quickAlbum">
+          <text class="quick-item-text">相册图</text>
+        </view>
+        <view
+          class="quick-item"
+          :class="{ disabled: lifeBusy }"
+          hover-class="quick-item--active"
+          @tap.stop="quickLife"
+        >
+          <text class="quick-item-text">{{ lifeBusy ? '汇总中…' : '生活数据' }}</text>
+        </view>
+      </view>
+
       <view class="tabs">
         <view class="tab" :class="{ on: tab === 'text' }" @tap.stop="switchTab('text')">
           <text class="tab-text">文本粘贴</text>
@@ -130,8 +147,13 @@
           </view>
         </view>
 
-        <view class="feed-btn" :class="{ disabled: !canFeed }" hover-class="feed-btn--active" @tap.stop="confirm">
-          <text class="feed-btn-text">投 喂</text>
+        <view
+          class="feed-btn"
+          :class="{ disabled: !canFeed || lifeBusy, ready: canFeed && !lifeBusy }"
+          hover-class="feed-btn--active"
+          @tap.stop="confirm"
+        >
+          <text class="feed-btn-text">{{ lifeBusy ? '汇总中…' : '投 喂' }}</text>
         </view>
         <view class="tail-pad" />
       </scroll-view>
@@ -221,6 +243,21 @@ function close() {
 
 function switchTab(next) {
   tab.value = next
+}
+
+function quickText() {
+  switchTab('text')
+}
+
+function quickAlbum() {
+  switchTab('file')
+  pickFromAlbum()
+}
+
+function quickLife() {
+  if (lifeBusy.value) return
+  switchTab('file')
+  pickLifeData()
 }
 
 function clearPicked() {
@@ -321,6 +358,7 @@ function pickLifeData() {
 }
 
 function confirm() {
+  if (lifeBusy.value) return
   if (!canFeed.value) {
     if (tab.value === 'text') uni.showToast({ title: '再写点什么吧', icon: 'none' })
     return
@@ -413,6 +451,37 @@ function confirm() {
   font-size: 26rpx;
   color: rgba(232, 200, 120, 0.8);
   padding: 8rpx 4rpx;
+}
+
+.quick-bar {
+  display: flex;
+  gap: 12rpx;
+  padding: 0 36rpx 14rpx;
+  flex-shrink: 0;
+}
+
+.quick-item {
+  flex: 1;
+  padding: 16rpx 0;
+  border-radius: 999rpx;
+  text-align: center;
+  background: rgba(232, 200, 120, 0.1);
+  border: 1rpx solid rgba(232, 200, 120, 0.35);
+}
+
+.quick-item--active {
+  background: rgba(232, 200, 120, 0.2);
+}
+
+.quick-item.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.quick-item-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #e8c878;
 }
 
 .tabs {
@@ -949,6 +1018,10 @@ function confirm() {
   text-align: center;
   background: linear-gradient(135deg, #f0d78c 0%, #c9a227 100%);
   box-shadow: 0 10rpx 28rpx rgba(201, 162, 39, 0.35);
+}
+
+.feed-btn.ready {
+  box-shadow: 0 12rpx 32rpx rgba(201, 162, 39, 0.48);
 }
 
 .feed-btn--active {

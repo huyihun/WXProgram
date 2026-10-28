@@ -229,7 +229,8 @@ export async function compressImageForChat(filePath) {
   return current
 }
 
-function wrapImageCdn(localPath) {
+/** 小黑传图 CDN：供 chatCodeAssist / chatWithAi 共用，禁止改成 base64 塞 callFunction */
+export function wrapImageCdn(localPath) {
   if (!localPath || !wx.cloud || !wx.cloud.CDN) return ''
   return wx.cloud.CDN({
     type: 'filePath',
